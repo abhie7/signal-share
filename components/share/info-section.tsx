@@ -94,7 +94,7 @@ export function InfoSection() {
         <footer className="pt-12 border-t border-border/10 flex flex-col md:flex-row items-center justify-between gap-6 text-xs font-mono text-muted-foreground uppercase tracking-widest">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            SignalShare © {new Date().getFullYear()}
+            SignalShare © <a href="https://github.com/abhie7" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Abhiraj Chaudhuri</a> {new Date().getFullYear()}
           </div>
           <div className="flex gap-6">
             <Link href="/docs" className="hover:text-primary transition-colors">Docs</Link>
