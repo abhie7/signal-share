@@ -6,6 +6,7 @@ import { parse } from 'url';
 
 import wsRoutes from './routes/ws.js';
 import transferRoutes from './routes/transfer.js';
+import healthRoutes from './routes/health.js';
 
 const dev = process.env.NODE_ENV !== 'production';
 const port = parseInt(process.env.PORT || '3000', 10);
@@ -38,6 +39,7 @@ async function main() {
   });
 
   // Register API routes
+  await fastify.register(healthRoutes);
   await fastify.register(wsRoutes);
   await fastify.register(transferRoutes);
 

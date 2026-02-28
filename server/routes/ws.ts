@@ -161,8 +161,7 @@ function handleMessage(
       const session = sessionRegistry.create(peerId, peer?.name || 'Unknown', files);
       session.senderWs = socket;
 
-      const port = parseInt(process.env.PORT || '3000', 10);
-      const host = process.env.HOST || getLanAddress(port);
+      const host = process.env.HOST || "";
       const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
 
       safeSend(socket, {
