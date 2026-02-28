@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SignalShare
+
+Direct peer-to-peer file transmission in your browser. 
+
+SignalShare bypasses the cloud, establishing direct device-to-device data channels over your local network using WebRTC. When devices are remote, it falls back to an ephemeral memory relay. 
+
+## Features
+
+- Direct Local Transfer: Devices on the same network transfer files directly via WebRTC.
+- Remote Relay Mode: Temporary server streams for remote peers with auto-deletion.
+- Zero Storage: No databases, no hard drives used for file holding.
+- Zero Accounts: No sign-ups, no OAuth, no tracking.
+- Single Server Architecture: Frontend (Next.js) and Backend (Fastify + WebSockets) run cohesively in one process.
+
+## Architecture
+
+Client A <-> WebSocket Signaling <-> Fastify Server <-> WebSocket Signaling <-> Client B
+Result: Client A <---> WebRTC DataChannel <---> Client B
+
+- Signaling: WebSocket communication handled by Fastify for initial handshakes.
+- P2P Transport: WebRTC data channels for maximum local throughput.
+- Fallback Relay: If WebRTC fails, files stream through temporary Fastify memory maps.
+
+## Tech Stack
+
+- Frontend: Next.js 16, React 19, TailwindCSS 4, Framer Motion, Zustand
+- Backend: Fastify, @fastify/websocket
+- Languages: TypeScript throughout the full stack
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Node.js (v20 or higher)
+- npm
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/abhie7/signal-share.git
+   cd signal-share
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-## Learn More
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+   The application will be available at `http://localhost:3000`.
 
-To learn more about Next.js, take a look at the following resources:
+### Production Build
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Build the Next.js frontend:
+   ```bash
+   npm run build
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2. Start the unified production server:
+   ```bash
+   npm start
+   ```
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `/app`: Next.js App Router containing pages, layouts, and SEO documentation.
+- `/components`: React UI components including the scanner interface and share widgets.
+- `/lib`: Client-side logic including Zustand stores and WebRTC connection handlers.
+- `/hooks`: Custom React hooks for websocket events and device state management.
+- `/server`: Fastify single-server implementation handling Websocket signaling and relay routing entirely separated from Next.js serverless functions.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Privacy & Security
+
+SignalShare is built as a transmission tool, not a data storage service.
+- No permanent storage is used. Files are streamed in memory.
+- Relay allocations automatically detonate after transmission.
+- No analytics or behavioral tracking scripts are utilized.
+
+## License
+
+This project is open-sourced under the MIT License.
