@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-4">
               <div className="hidden sm:flex items-center gap-4 mr-2">
                 <Link href="/docs" className="text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors">Docs</Link>
-                <a href="https://github.com/aumu1031/p2p-share" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors">
+                <a href="https://github.com/abhie7/signal-share" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors">
                   <HugeiconsIcon icon={GithubIcon} className="w-4 h-4" />
                   <span>GitHub</span>
                 </a>

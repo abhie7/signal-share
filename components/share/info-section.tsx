@@ -71,7 +71,7 @@ export function InfoSection() {
               </p>
             </div>
             <div className="flex gap-4">
-              <a href="https://github.com/aumu1031/p2p-share" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 rounded-full bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30 transition-colors font-mono uppercase tracking-widest text-xs">
+              <a href="https://github.com/abhie7/signal-share" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 rounded-full bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30 transition-colors font-mono uppercase tracking-widest text-xs">
                 <HugeiconsIcon icon={GithubIcon} className="w-4 h-4" />
                 View Repository
               </a>
@@ -99,7 +99,7 @@ export function InfoSection() {
           <div className="flex gap-6">
             <Link href="/docs" className="hover:text-primary transition-colors">Docs</Link>
             <Link href="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
-            <a href="https://github.com/aumu1031/p2p-share/commits/main" className="hover:text-primary transition-colors">Changelog</a>
+            <a href="https://github.com/abhie7/signal-share/commits/main" className="hover:text-primary transition-colors">Changelog</a>
           </div>
         </footer>
       </div>
