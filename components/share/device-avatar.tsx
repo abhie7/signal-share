@@ -64,6 +64,7 @@ export function DeviceAvatar({ name, size = 'md', active, showTooltip = true }: 
           src={`https://api.dicebear.com/9.x/big-smile/svg?seed=${encodeURIComponent(name)}&backgroundColor=transparent`}
           alt={name}
           className="w-full h-full object-cover scale-[1.1]"
+          unoptimized
         />
       </motion.div>
     </motion.div>

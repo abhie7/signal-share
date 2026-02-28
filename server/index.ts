@@ -3,6 +3,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import next from 'next';
 import { parse } from 'url';
+import cron from 'node-cron';
 
 import wsRoutes from './routes/ws.js';
 import transferRoutes from './routes/transfer.js';
@@ -59,6 +60,20 @@ async function main() {
   try {
     await fastify.listen({ port, host: hostname });
     console.log(`\n  🚀 P2P Share running at http://localhost:${port}\n`);
+
+    // Ping health endpoint every 14 minutes to prevent Render sleep mode
+    if (process.env.NODE_ENV === 'production') {
+      cron.schedule('*/14 * * * *', async () => {
+        try {
+          const host = process.env.HOST || `localhost:${port}`;
+          await fetch(`http://${host}/health`);
+          console.log(`[${new Date().toISOString()}] Health check ping sent`);
+        } catch (err) {
+          console.error('Health check ping failed:', err);
+        }
+      });
+      console.log('Health check pinging enabled (every 14 minutes)\n');
+    }
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
