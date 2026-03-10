@@ -2,7 +2,6 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { formatBytes } from '@/lib/webrtc/file-chunker';
 import { DeviceAvatar } from './device-avatar';

@@ -65,6 +65,8 @@ export function DeviceAvatar({ name, size = 'md', active, showTooltip = true }: 
           alt={name}
           className="w-full h-full object-cover scale-[1.1]"
           unoptimized
+          width={100}
+          height={100}
         />
       </motion.div>
     </motion.div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import QRCode from 'qrcode';
 import Image from 'next/image';
 
@@ -15,7 +16,7 @@ export function QRCodeDisplay({ value }: QRCodeDisplayProps) {
     if (!value) return;
 
     QRCode.toDataURL(value, {
-      width: 256,
+      width: 512,
       margin: 1,
       color: {
         dark: '#ffffff',
@@ -26,36 +27,42 @@ export function QRCodeDisplay({ value }: QRCodeDisplayProps) {
   }, [value]);
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="relative rounded-3xl border border-primary/30 bg-background/80 backdrop-blur-md p-5 shadow-[0_0_40px_rgba(var(--primary),0.2)]">
-        {/* Glow behind QR */}
-        <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-3xl" />
-        
-        {/* Glowing corners */}
-        <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-primary rounded-tl-xl" />
-        <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-primary rounded-tr-xl" />
-        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-primary rounded-bl-xl" />
-        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-primary rounded-br-xl" />
+    <div className="flex w-full flex-col items-center gap-4">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="relative w-full max-w-62.5 sm:max-w-70 rounded-[28px] border border-primary/30 bg-linear-to-b from-card/70 to-background/70 p-4 sm:p-5 shadow-[0_0_40px_rgba(var(--primary),0.15)]"
+      >
+        <div className="absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_top,rgba(var(--primary),0.18),transparent_60%)]" />
 
-        <div className="relative z-10 bg-black/40 p-2 rounded-xl backdrop-blur-md border border-white/10">
+        <motion.div
+          aria-hidden
+          className="absolute left-0 top-0 h-full w-16 rounded-full"
+          animate={{ x: ['-40%', '160%'] }}
+          transition={{ repeat: Infinity, duration: 3.2, ease: 'easeInOut' }}
+        />
+
+        <div className="relative z-10 rounded-xl border border-white/10 bg-black/95 p-2 sm:p-3 backdrop-blur-md">
           {qrDataUrl ? (
-            <Image 
-              src={qrDataUrl} 
-              alt="QR Code" 
-              width={180} 
-              height={180} 
-              className="rounded-lg select-none pointer-events-none"
+            <Image
+              src={qrDataUrl}
+              alt="QR Code"
+              width={220}
+              height={220}
+              className="h-40 w-40 sm:h-50 sm:w-50 rounded-xl mx-auto select-none pointer-events-none"
               unoptimized
             />
           ) : (
-            <div className="w-[180px] h-[180px] flex items-center justify-center">
+            <div className="h-40 w-40 sm:h-50 sm:w-50 flex items-center justify-center">
               <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
             </div>
           )}
         </div>
-      </div>
-      <div className="flex flex-col items-center gap-1">
-        <span className="text-[10px] font-mono text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+      </motion.div>
+
+      <div className="flex flex-col items-center gap-1 text-center">
+        <span className="text-[9px] sm:text-[10px] font-mono text-primary uppercase tracking-widest bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
           Scan to Receive Files
         </span>
       </div>

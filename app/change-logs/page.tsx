@@ -1,11 +1,9 @@
 import { AppShell } from '@/components/share/app-shell';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft02Icon as ArrowLeftIcon, Calendar01Icon as CalendarIcon, DocumentCodeIcon as DocumentTextIcon, Rocket02Icon as RocketIcon, PenTool02Icon as ToolIcon } from '@hugeicons/core-free-icons';
-import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 
 export const metadata = {
-  title: 'Changelog | SignalShare',
-  description: 'Latest updates, features, and improvements to SignalShare.',
+  title: 'Changelogs | SignalShare',
+  description: 'Latest updates and improvements to SignalShare.',
 };
 
 const changelogs = [
@@ -14,107 +12,243 @@ const changelogs = [
     version: 'v1.2.0',
     changes: [
       {
-        type: 'feature',
+        type: 'new',
         title: 'Global Drag & Drop',
-        description: 'You can now drag and drop files anywhere on the application window to instantly initiate a transfer, featuring a stunning new blur overlay.',
+        description:
+          'Files can now be dropped anywhere in the window to initiate transfer. Supports overlay state and immediate transfer initialization.',
       },
       {
-        type: 'feature',
-        title: 'Folder & Directory Uploads',
-        description: 'Drop entire folders into SignalShare! The client will now automatically zip the directory structure before transmitting it over WebRTC.',
+        type: 'new',
+        title: 'Folder Uploads',
+        description:
+          'Entire directories are accepted. Client compresses folder structure before WebRTC transmission.',
       },
       {
-        type: 'feature',
+        type: 'new',
         title: 'Transfer History',
-        description: 'A new local History page keeps track of all your past sent and received transfers securely using IndexedDB. No server required.',
+        description:
+          'Transfers are now stored in IndexedDB to maintain session history and enable client-side retrieval without server dependency.',
+      },
+      {
+        type: 'new',
+        title: 'Confetti & Sound Feedback',
+        description:
+        'Added celebratory confetti animation and optional sound effects upon successful file transfer completion to improve user feedback loops.',
+      },
+      {
+        type: 'new',
+        title: 'QR Code Sharing',
+        description:
+        'Enabled instant session sharing via dynamically generated QR codes. Allows seamless device-to-device pairing without manual signal entry.',
+      },
+      {
+        type: 'new',
+        title: 'Theme Toggling',
+        description:
+        'Implemented system-aware light and dark theme switching with persistent user preference storage.',
+      },
+      {
+        type: 'new',
+        title: 'Pre-Transfer File Management Modal',
+        description:
+        'Added a confirmation modal allowing users to remove selected files or append additional files before initiating transfer.',
+      },
+      {
+        type: 'new',
+        title: 'Changelog Page',
+        description:
+        'Introduced a dedicated changelog page for structured version tracking and product evolution transparency.',
       },
       {
         type: 'improvement',
-        title: 'UI Polish & Grid Layouts',
-        description: 'Centered the "Incoming Signal" prompt, added user avatars to the navigation bar, and completely redesigned the "Awaiting Connection" screen to use a responsive grid layout.',
+        title: 'Layout Refactor',
+        description:
+        'Improved grid alignment and responsive behavior across connection states.',
       },
       {
         type: 'improvement',
-        title: 'Enhanced QR Codes & E2E Badges',
-        description: 'QR codes are now rendered dynamically using next/image with a premium glowing design. Added explicit "100% End-to-End Encrypted" badges to build trust during transmissions.',
+        title: 'Connection Dialog Alignment',
+        description:
+        'Corrected layout issue causing the connection request dialog to render off-center on certain viewport sizes.',
+      },
+      {
+        type: 'improvement',
+        title: 'Transfer State Feedback Refinement',
+        description:
+        'Improved visual clarity of connection states including awaiting peer, negotiating, connected, and transferring.',
+      },
+      {
+        type: 'improvement',
+        title: 'Session Lifecycle Handling',
+        description:
+        'Improved cleanup logic after completed or aborted transfers to prevent residual peer state conflicts.',
+      },
+      {
+        type: 'tweak',
+        title: 'Animated Network Flow Diagram',
+        description:
+        'Introduced a real-time animated network visualization to represent peer-to-peer data transfer. Improves clarity of connection states and enhances onboarding experience.',
       },
       {
         type: 'fix',
-        title: 'Theme Favicons',
-        description: 'Favicon now dynamically respects system dark/light modes using native prefers-color-scheme CSS inside the SVG.',
+        title: 'Mobile File Upload Retry Bug',
+        description:
+          'Resolved issue where mobile devices failed to register file input on first selection attempt due to input event handling inconsistency.',
+      }
+    ]
+  },
+  {
+    date: 'March 3, 2026',
+    version: 'v1.1.2',
+    changes: [
+      {
+        type: 'fix',
+        title: 'Relay Transfer Mode',
+        description:
+          'Added fallback relay transfer mode for unstable or restricted peer-to-peer environments. Automatically prompts users when direct WebRTC connection degrades.',
+      },
+      {
+        type: 'improvement',
+        title: 'WebRTC Stability Enhancements',
+        description:
+          'Improved ICE candidate handling, retry logic, and connection timeouts to reduce failed session attempts.',
+      },
+      {
+        type: 'improvement',
+        title: 'Robust Error Handling',
+        description:
+          'Standardized error states and improved UI messaging for failed connections, dropped peers, and transfer interruptions.',
+      }
+    ]
+  },
+  {
+    date: 'February 28, 2026',
+    version: 'v1.1.1',
+    changes: [
+      {
+        type: 'new',
+        title: 'Health Check Endpoint',
+        description:
+          'Introduced a dedicated health check API endpoint to monitor server availability and uptime status.',
+      },
+      {
+        type: 'new',
+        title: 'Automated Health Pings',
+        description:
+          'Integrated node-cron to schedule periodic uptime verification and prevent cold-start latency.',
+      },
+      {
+        type: 'improvement',
+        title: 'Footer Attribution Update',
+        description:
+          'Updated footer to include author attribution link and improved layout consistency.',
+      },
+      {
+        type: 'improvement',
+        title: 'Analytics Configuration Update',
+        description:
+          'Refined analytics setup and later removed Vercel Analytics to reduce client bundle overhead.',
+      },
+      {
+        type: 'improvement',
+        title: 'Documentation Update',
+        description:
+          'Expanded README with updated setup instructions, architecture overview, and deployment notes.',
+      },
+      {
+        type: 'fix',
+        title: 'Type Definitions for node-cron',
+        description:
+          'Added missing TypeScript type definitions to improve development reliability.',
+      }
+    ]
+  },
+  {
+    date: 'February 27, 2026',
+    version: 'v1.0.0',
+    changes: [
+      {
+        type: 'new',
+        title: 'Project Initialization',
+        description:
+          'Bootstrapped project using Create Next App with initial routing, layout structure, and TypeScript configuration.',
+      },
+      {
+        type: 'new',
+        title: 'Core Application Scaffold',
+        description:
+          'Established foundational project structure including environment configuration, basic UI shell, and deployment setup.',
       }
     ]
   }
 ];
 
+const typeStyles: Record<string, string> = {
+  new: 'bg-emerald-900/70 text-emerald-400',
+  feature: 'bg-cyan-900/70 text-cyan-400',
+  improvement: 'bg-blue-900/70 text-blue-400',
+  fix: 'bg-amber-900/70 text-amber-400',
+  tweak: 'bg-violet-900/70 text-violet-400',
+};
+
 export default function ChangelogPage() {
   return (
     <AppShell>
-      <div className="w-full max-w-3xl mx-auto px-6 pt-32 pb-24 flex flex-col gap-12">
-        <Link href="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors font-mono text-xs uppercase tracking-widest w-fit">
-          <HugeiconsIcon icon={ArrowLeftIcon} className="w-4 h-4" />
-          Back to Scanner
-        </Link>
+      <main className="max-w-4xl mx-auto px-4 py-16">
 
-        <div>
-          <div className="flex items-center gap-3 mb-4 text-primary">
-            <HugeiconsIcon icon={CalendarIcon} className="w-8 h-8" />
-            <h1 className="text-3xl font-bold tracking-widest uppercase text-foreground">Change Logs</h1>
+        {/* Header */}
+        <header className="mb-16 space-y-4">
+          <div>
+            <h1 className="text-4xl font-semibold tracking-tight">
+              Changelogs
+            </h1>
+            <p className="text-muted-foreground mt-2 text-sm">
+              App updates, improvements, and fixes.
+            </p>
           </div>
-          <p className="font-mono text-sm text-muted-foreground leading-relaxed">
-            Stay up to date with the latest features, improvements, and bug fixes in SignalShare.
-          </p>
-        </div>
+        </header>
 
-        <div className="space-y-12">
-          {changelogs.map((log, index) => (
-            <div key={index} className="relative pl-8 md:pl-0">
-              {/* Timeline line on mobile */}
-              <div className="absolute left-[11px] top-2 bottom-0 w-px bg-border/50 md:hidden" />
-              
-              <div className="flex flex-col md:flex-row gap-6 md:gap-12">
-                {/* Date/Version Marker */}
-                <div className="md:w-48 shrink-0 flex flex-col gap-1 relative z-10">
-                  <div className="absolute -left-8 md:static md:left-auto flex items-center justify-center w-6 h-6 rounded-full bg-background border-2 border-primary/50 text-primary shadow-[0_0_10px_rgba(var(--primary),0.2)] md:hidden">
-                    <div className="w-2 h-2 rounded-full bg-primary" />
-                  </div>
-                  <h3 className="text-lg font-bold text-foreground">{log.date}</h3>
-                  <span className="text-xs font-mono uppercase tracking-widest text-primary/80 bg-primary/10 w-fit px-2 py-0.5 rounded-full border border-primary/20">
-                    {log.version}
-                  </span>
-                </div>
+        {/* Logs */}
+        <section className="space-y-20">
+          {changelogs.map((log) => (
+            <article key={log.version} className="space-y-8">
 
-                {/* Changes List */}
-                <div className="flex flex-col gap-6 w-full">
-                  {log.changes.map((change, cIdx) => (
-                    <div key={cIdx} className="bg-card/20 border border-primary/10 p-5 rounded-2xl backdrop-blur-sm hover:bg-card/40 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${
-                          change.type === 'feature' ? 'bg-emerald-500/10 text-emerald-400' :
-                          change.type === 'improvement' ? 'bg-blue-500/10 text-blue-400' :
-                          'bg-amber-500/10 text-amber-400'
-                        }`}>
-                          {change.type === 'feature' ? <HugeiconsIcon icon={RocketIcon} className="w-4 h-4" /> :
-                           change.type === 'improvement' ? <HugeiconsIcon icon={ToolIcon} className="w-4 h-4" /> :
-                           <HugeiconsIcon icon={DocumentTextIcon} className="w-4 h-4" />}
-                        </div>
-                        <div className="space-y-1">
-                          <h4 className="text-sm font-bold tracking-wider text-foreground/90 uppercase">
-                            {change.title}
-                          </h4>
-                          <p className="text-sm font-mono text-muted-foreground leading-relaxed">
-                            {change.description}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {/* Version Block */}
+              <div className="border-b pb-4">
+                <h2 className="text-2xl font-semibold">
+                  {log.version}
+                </h2>
+                <time className="text-sm text-muted-foreground">
+                  {log.date}
+                </time>
               </div>
-            </div>
+
+              {/* Change List */}
+              <ul className="space-y-6">
+                {log.changes.map((change, index) => (
+                  <li key={index} className="space-y-1">
+
+                    <div className="flex items-center gap-3">
+                      <Badge
+                        className={`text-xs font-medium uppercase tracking-wide ${typeStyles[change.type]}`}
+                      >
+                        {change.type}
+                      </Badge>
+                      <h3 className="text-base font-medium">
+                        {change.title}
+                      </h3>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {change.description}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </article>
           ))}
-        </div>
-      </div>
+        </section>
+      </main>
     </AppShell>
   );
 }

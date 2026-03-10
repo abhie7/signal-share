@@ -99,10 +99,10 @@ function HomeView() {
       animate="animate"
       exit="exit"
       transition={{ duration: 0.4 }}
-      className="relative w-full min-h-screen flex flex-col items-center justify-center pt-20"
+      className="relative w-full min-h-screen flex flex-col items-center justify-center pt-20 pb-72 lg:pb-8"
     >
       {/* Mode Toggle */}
-      <div className="fixed top-24 right-6 z-40 flex items-center rounded-full border border-primary/20 bg-background/40 backdrop-blur-md p-1 shadow-[0_0_15px_rgba(var(--primary),0.1)]">
+      <div className="fixed top-24 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 z-40 flex items-center rounded-full border border-primary/20 bg-background/60 backdrop-blur-md p-1 shadow-[0_0_15px_rgba(var(--primary),0.1)]">
         <button
           onClick={() => setMode('local')}
           className={`px-4 py-1.5 rounded-full text-[10px] font-mono uppercase tracking-widest transition-all ${mode === 'local'
@@ -131,7 +131,7 @@ function HomeView() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.4 }}
-            className="w-full h-full flex flex-col items-center justify-center relative"
+            className="w-full h-full flex flex-col items-center justify-center relative px-4 lg:px-0"
           >
             {/* Visual Hero Text */}
             <div className={`absolute top-10 md:top-20 flex flex-col items-center text-center px-4 z-20 pointer-events-none transition-opacity duration-300 ${stagingFiles.length > 0 ? 'opacity-0' : 'opacity-100'}`}>
@@ -144,17 +144,17 @@ function HomeView() {
             </div>
 
             {stagingFiles.length > 0 ? (
-              <div className="z-30 w-full max-w-md bg-background border border-primary/20 rounded-3xl p-6 shadow-[0_0_30px_rgba(var(--primary),0.1)] mb-64 lg:mb-0 mt-8 max-h-[70vh] flex flex-col">
-                <FileDropZone 
-                  initialFiles={stagingFiles} 
+              <div className="z-30 w-full max-w-md bg-background border border-primary/20 rounded-3xl p-4 sm:p-6 shadow-[0_0_30px_rgba(var(--primary),0.1)] mb-72 lg:mb-0 mt-8 max-h-[70vh] flex flex-col">
+                <FileDropZone
+                  initialFiles={stagingFiles}
                   onFilesSelected={(filesToShare) => {
                     setStagingFiles([]);
                     shareFiles(filesToShare);
-                  }} 
+                  }}
                 />
-                <Button 
-                  variant="ghost" 
-                  onClick={() => setStagingFiles([])} 
+                <Button
+                  variant="ghost"
+                  onClick={() => setStagingFiles([])}
                   className="w-full mt-4 text-muted-foreground hover:text-destructive text-xs uppercase tracking-widest font-mono"
                 >
                   Cancel sharing
@@ -170,7 +170,7 @@ function HomeView() {
             </div>
 
             {/* Mobile Nearby Devices */}
-            <div className="fixed bottom-0 left-0 right-0 h-64 lg:hidden z-30 p-4">
+            <div className="fixed bottom-0 left-0 right-0 h-[38vh] max-h-72 lg:hidden z-30 p-4">
               <NearbyPeers onPeerClick={handlePeerClick} />
             </div>
           </motion.div>
@@ -181,14 +181,14 @@ function HomeView() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.4 }}
-            className="w-full max-w-md flex flex-col items-center gap-8"
+            className="w-full max-w-md px-4 sm:px-0 flex flex-col items-center gap-6 sm:gap-8"
           >
             <div className="text-center space-y-2">
               <h2 className="text-2xl font-bold tracking-widest uppercase text-foreground/90">Join Transmission</h2>
               <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Enter a secure relay key</p>
             </div>
 
-            <div className="w-full rounded-2xl border border-primary/20 bg-card/20 p-8 backdrop-blur-xl shadow-[0_0_30px_rgba(var(--primary),0.1)] flex flex-col items-center gap-8">
+            <div className="w-full rounded-2xl border border-primary/20 bg-card/20 p-5 sm:p-8 backdrop-blur-xl shadow-[0_0_30px_rgba(var(--primary),0.1)] flex flex-col items-center gap-6 sm:gap-8">
               {/* Waveform animation */}
               <div className="flex items-center justify-center gap-1 h-12 w-full">
                 {[...Array(20)].map((_, i) => (
@@ -231,11 +231,11 @@ function SendingView() {
       animate="animate"
       exit="exit"
       transition={{ duration: 0.4 }}
-      className="relative w-full min-h-screen flex flex-col items-center justify-center gap-8 pt-20 pb-12"
+      className="relative w-full min-h-screen flex flex-col items-center justify-center gap-8 pt-20 pb-12 px-4 sm:px-6"
     >
       <div className="text-center space-y-2">
         <motion.h1
-          className="text-2xl font-bold tracking-widest uppercase text-foreground/90"
+          className="text-xl sm:text-2xl font-bold tracking-widest uppercase text-foreground/90"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -263,17 +263,17 @@ function SendingView() {
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 px-4"
+          className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8"
         >
           {/* Main Code/Radar section (2 columns) */}
-          <div className="lg:col-span-2 flex flex-col items-center justify-center gap-8 bg-card/10 border border-primary/10 rounded-3xl p-8 backdrop-blur-md shadow-[0_0_30px_rgba(var(--primary),0.05)]">
+          <div className="lg:col-span-2 flex flex-col items-center justify-center gap-6 sm:gap-8 bg-card/10 border border-primary/10 rounded-3xl p-5 sm:p-8 backdrop-blur-md shadow-[0_0_30px_rgba(var(--primary),0.05)]">
             <div className="text-center space-y-2 mb-2">
               <h3 className="text-lg font-bold tracking-widest uppercase text-foreground/80">Transfer Code</h3>
               <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Share this code with the receiver</p>
             </div>
-            
+
             {/* Radar scanning animation */}
-            <div className="relative flex items-center justify-center w-64 h-64">
+            <div className="relative flex items-center justify-center w-52 h-52 sm:w-64 sm:h-64">
               <motion.div
                 className="absolute inset-0 rounded-full border border-primary/30"
                 animate={{ scale: [1, 2], opacity: [0.8, 0] }}
@@ -294,20 +294,20 @@ function SendingView() {
           </div>
 
           {/* QR Code and Link section (1 column) */}
-          <div className="flex flex-col items-center justify-center gap-8 bg-card/10 border border-primary/10 rounded-3xl p-6 lg:p-8 backdrop-blur-md shadow-[0_0_30px_rgba(var(--primary),0.05)]">
+          <div className="flex flex-col items-center justify-center gap-6 bg-card/10 border border-primary/10 rounded-3xl p-5 sm:p-6 lg:p-8 backdrop-blur-md shadow-[0_0_30px_rgba(var(--primary),0.05)]">
             <div className="text-center space-y-2 w-full">
               <h3 className="text-lg font-bold tracking-widest uppercase text-foreground/80">Scan or Share</h3>
               <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Alternative methods</p>
             </div>
-            
+
             <div className="flex flex-col items-center gap-6 w-full">
               {shareLink && <QRCodeDisplay value={shareLink} />}
               <div className="w-full h-px bg-border/40 my-1" />
               {shareLink && <ShareLink link={shareLink} />}
               {/* E2E Security Badge */}
-              <div className="flex items-center gap-2 mt-4 px-4 py-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-2 sm:mt-4 px-3 sm:px-4 py-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-center">
                 <HugeiconsIcon icon={SecurityLockIcon} className="w-4 h-4" />
-                <span className="text-[10px] font-mono uppercase tracking-widest">100% End-to-End Encrypted via WebRTC</span>
+                <span className="text-[9px] sm:text-[10px] font-mono uppercase tracking-widest">100% E2E Encrypted via WebRTC</span>
               </div>
             </div>
           </div>

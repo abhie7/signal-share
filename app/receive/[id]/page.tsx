@@ -7,7 +7,6 @@ import { AppShell } from '@/components/share/app-shell';
 import { TransferProgress } from '@/components/share/transfer-progress';
 import { DeviceAvatar } from '@/components/share/device-avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransfer } from '@/hooks/use-transfer';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { useAppStore } from '@/lib/stores/app-store';

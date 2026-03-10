@@ -99,7 +99,7 @@ export function InfoSection() {
           <div className="flex gap-6">
             <Link href="/docs" className="hover:text-primary transition-colors">Docs</Link>
             <Link href="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
-            <a href="https://github.com/abhie7/signal-share/commits/main" className="hover:text-primary transition-colors">Changelog</a>
+            <Link href="/change-logs" className="hover:text-primary transition-colors">Changelog</Link>
           </div>
         </footer>
       </div>
