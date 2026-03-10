@@ -1,10 +1,9 @@
-'use client';
-
 import { useEffect, useRef } from 'react';
 import { signaling } from '@/lib/webrtc/signaling';
 import { useAppStore } from '@/lib/stores/app-store';
 import { usePeersStore } from '@/lib/stores/peers-store';
 import { useTransferStore } from '@/lib/stores/transfer-store';
+import { playPeerDiscovered } from '@/lib/sounds';
 
 export function useWebSocket() {
   const initialized = useRef(false);
@@ -69,6 +68,7 @@ export function useWebSocket() {
       signaling.on('peer-joined', (msg) => {
         const peer = msg.peer as { id: string; name: string };
         addPeer(peer);
+        playPeerDiscovered();
       }),
       signaling.on('peer-updated', (msg) => {
         const peer = msg.peer as { id: string; name: string };

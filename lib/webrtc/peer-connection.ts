@@ -175,7 +175,8 @@ export class PeerConnectionManager {
         this.totalFilesExpected = msg.totalFiles as number;
         this.totalBytesExpected = msg.totalSize as number;
         this.receivedChunks = [];
-        this.receivedBytes = 0;
+        // Do not reset receivedBytes here to keep cumulative progress for overall %
+        // this.receivedBytes = 0;
         break;
       }
       case 'file-end': {

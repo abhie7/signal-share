@@ -6,7 +6,10 @@ import { motion } from 'framer-motion';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { GithubIcon } from '@hugeicons/core-free-icons';
+import { GithubIcon, Rocket01Icon } from '@hugeicons/core-free-icons';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { SoundToggle } from '@/components/sound-toggle';
+import { useTheme } from 'next-themes';
 import Link from 'next/link';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -14,6 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const deviceName = useAppStore((s) => s.deviceName);
   const isConnected = useAppStore((s) => s.isConnected);
+  const { resolvedTheme } = useTheme();
 
   return (
     <TooltipProvider>
@@ -37,17 +41,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="fixed top-0 left-0 right-0 z-50 px-6 py-6 pointer-events-none"
         >
           <div className="mx-auto flex max-w-7xl items-center justify-between pointer-events-auto">
-            <div className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-3">
               <motion.div
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary font-bold text-xs shadow-[0_0_15px_rgba(var(--primary),0.2)]"
                 whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(var(--primary),0.4)" }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path>
-                </svg>
+                <HugeiconsIcon icon={Rocket01Icon} className="w-4 h-4" />
               </motion.div>
               <span className="text-sm font-bold tracking-widest uppercase text-foreground/90">SignalShare</span>
-            </div>
+            </Link>
 
             <div className="flex items-center gap-4">
               <div className="hidden sm:flex items-center gap-4 mr-2">
@@ -56,6 +58,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <HugeiconsIcon icon={GithubIcon} className="w-4 h-4" />
                   <span>GitHub</span>
                 </a>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <SoundToggle />
+                <ThemeToggle />
               </div>
               <div className="flex items-center gap-3 rounded-full border border-border/40 bg-background/40 px-4 py-1.5 backdrop-blur-md">
                 {deviceName && (
@@ -83,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        <Toaster position="bottom-right" theme="dark" />
+        <Toaster position="bottom-right" theme={(resolvedTheme as 'dark' | 'light') || 'dark'} />
       </div>
     </TooltipProvider>
   );

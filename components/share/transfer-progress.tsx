@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useTransferStore } from '@/lib/stores/transfer-store';
-import { formatBytes, formatSpeed, formatETA } from '@/lib/webrtc/file-chunker';
+import { formatBytes, formatSpeed, formatETA, downloadBlob } from '@/lib/webrtc/file-chunker';
 import { useTransfer } from '@/hooks/use-transfer';
 import { useEffect, useState } from 'react';
 
@@ -11,6 +11,8 @@ export function TransferProgress() {
   const progress = useTransferStore((s: any) => s.progress);
   const status = useTransferStore((s: any) => s.status);
   const fileInfos = useTransferStore((s: any) => s.fileInfos);
+  const role = useTransferStore((s: any) => s.role);
+  const receivedFiles = useTransferStore((s: any) => s.receivedFiles);
   const [showRelayOption, setShowRelayOption] = useState(false);
 
   const percentage =
@@ -132,6 +134,8 @@ export function TransferProgress() {
             fileProgress = Math.min(100, (currentFileBytesTransferred / file.size) * 100);
           }
 
+          const receivedFile = receivedFiles.find((f: any) => f.name === file.name);
+
           return (
             <motion.div
               key={index}
@@ -145,9 +149,24 @@ export function TransferProgress() {
                 <span className="text-sm font-bold text-foreground/90 truncate pr-4">
                   {file.name}
                 </span>
-                <span className="text-xs font-mono text-muted-foreground shrink-0">
-                  {formatBytes(file.size)}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono text-muted-foreground shrink-0">
+                    {formatBytes(file.size)}
+                  </span>
+                  {isComplete && role === 'receiver' && receivedFile && (
+                    <button
+                      onClick={() => downloadBlob(receivedFile.blob, receivedFile.name)}
+                      className="text-primary hover:text-primary/80 transition-colors p-1"
+                      title="Download file"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider mb-2">

@@ -5,6 +5,7 @@ import { PeerConnectionManager } from '@/lib/webrtc/peer-connection';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { downloadBlob } from '@/lib/webrtc/file-chunker';
 import { signaling } from '@/lib/webrtc/signaling';
+import { playTransferComplete, playTransferStart, playError } from '@/lib/sounds';
 
 // Module-level singleton — prevents duplicate PeerConnectionManagers
 // when useWebRTC() is called from multiple component instances
@@ -54,6 +55,7 @@ export function useWebRTC() {
         },
         onComplete: () => {
           setStatus('complete');
+          playTransferComplete();
           transferLock = false;
         },
         onError: (error) => {
@@ -92,6 +94,7 @@ export function useWebRTC() {
       try {
         await pc.createOffer();
         setStatus('connecting');
+        playTransferStart();
 
         await pc.waitForDataChannel();
         setStatus('transferring');
@@ -159,6 +162,7 @@ export function useWebRTC() {
         },
         onComplete: () => {
           setStatus('complete');
+          playTransferComplete();
           transferLock = false;
         },
         onError: (error) => {

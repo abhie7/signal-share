@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { formatBytes } from '@/lib/webrtc/file-chunker';
@@ -21,11 +21,12 @@ import {
 interface FileDropZoneProps {
   onFilesSelected: (files: File[]) => void;
   disabled?: boolean;
+  initialFiles?: File[];
 }
 
-export function FileDropZone({ onFilesSelected, disabled }: FileDropZoneProps) {
+export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>(initialFiles || []);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -92,63 +93,65 @@ export function FileDropZone({ onFilesSelected, disabled }: FileDropZoneProps) {
 
   return (
     <div className="space-y-4">
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileInput}
+      />
+
       {/* Drop zone */}
-      <motion.div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => !disabled && inputRef.current?.click()}
-        className={`
-          relative cursor-pointer rounded-2xl border-2 border-dashed p-10
-          transition-colors duration-200
-          ${isDragOver
-            ? 'border-primary bg-primary/5'
-            : 'border-border/60 hover:border-primary/40 hover:bg-muted/30'
-          }
-          ${disabled ? 'pointer-events-none opacity-50' : ''}
-        `}
-        animate={{
-          borderColor: isDragOver ? 'var(--color-primary)' : undefined,
-        }}
-      >
-        {/* Animated pulse ring on drag */}
-        <AnimatePresence>
-          {isDragOver && (
+      {selectedFiles.length === 0 && (
+        <motion.div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => !disabled && inputRef.current?.click()}
+          className={`
+            relative cursor-pointer rounded-2xl border-2 border-dashed p-10
+            transition-colors duration-200
+            ${isDragOver
+              ? 'border-primary bg-primary/5'
+              : 'border-border/60 hover:border-primary/40 hover:bg-muted/30'
+            }
+            ${disabled ? 'pointer-events-none opacity-50' : ''}
+          `}
+          animate={{
+            borderColor: isDragOver ? 'var(--color-primary)' : undefined,
+          }}
+        >
+          {/* Animated pulse ring on drag */}
+          <AnimatePresence>
+            {isDragOver && (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 1.1, opacity: 0 }}
+                className="absolute inset-0 rounded-2xl border-2 border-primary/30"
+              />
+            )}
+          </AnimatePresence>
+
+          <div className="flex flex-col items-center gap-3 text-center">
             <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 1.1, opacity: 0 }}
-              className="absolute inset-0 rounded-2xl border-2 border-primary/30"
-            />
-          )}
-        </AnimatePresence>
-
-        <div className="flex flex-col items-center gap-3 text-center">
-          <motion.div
-            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary"
-            animate={{ y: isDragOver ? -5 : 0 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-          >
-            {isDragOver ? <HugeiconsIcon icon={DownloadIcon} className="w-8 h-8" /> : <HugeiconsIcon icon={FolderIcon} className="w-8 h-8" />}
-          </motion.div>
-          <div>
-            <p className="text-base font-medium text-foreground">
-              {isDragOver ? 'Drop files here' : 'Drag & drop files here'}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              or click to browse • any file type • no size limit
-            </p>
+              className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary"
+              animate={{ y: isDragOver ? -5 : 0 }}
+              transition={{ type: 'spring', stiffness: 300 }}
+            >
+              {isDragOver ? <HugeiconsIcon icon={DownloadIcon} className="w-8 h-8" /> : <HugeiconsIcon icon={FolderIcon} className="w-8 h-8" />}
+            </motion.div>
+            <div>
+              <p className="text-base font-medium text-foreground">
+                {isDragOver ? 'Drop files here' : 'Drag & drop files here'}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                or click to browse • any file type • no size limit
+              </p>
+            </div>
           </div>
-        </div>
-
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={handleFileInput}
-        />
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* Selected files list */}
       <AnimatePresence mode="popLayout">
@@ -170,7 +173,7 @@ export function FileDropZone({ onFilesSelected, disabled }: FileDropZoneProps) {
                 </span>
               </div>
 
-              <div className="max-h-48 overflow-y-auto p-2">
+              <div className="max-h-[50vh] overflow-y-auto p-2">
                 <AnimatePresence mode="popLayout">
                   {selectedFiles.map((file, index) => (
                     <motion.div
@@ -182,7 +185,21 @@ export function FileDropZone({ onFilesSelected, disabled }: FileDropZoneProps) {
                       transition={{ duration: 0.2 }}
                       className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 group"
                     >
-                      <span className="text-lg shrink-0">{getFileIcon(file.type)}</span>
+                      {file.type.startsWith('image/') ? (
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          className="w-8 h-8 rounded-md object-cover shrink-0"
+                          onLoad={(e) => {
+                            // Revoke after rendering to free memory
+                            // We delay slightly so the browser can paint
+                            const src = (e.target as HTMLImageElement).src;
+                            setTimeout(() => URL.revokeObjectURL(src), 1000);
+                          }}
+                        />
+                      ) : (
+                        <span className="text-lg shrink-0">{getFileIcon(file.type)}</span>
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
                         <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>
@@ -194,7 +211,7 @@ export function FileDropZone({ onFilesSelected, disabled }: FileDropZoneProps) {
                           e.stopPropagation();
                           removeFile(index);
                         }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0 p-1 rounded-md"
+                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0 p-1 rounded-md"
                       >
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                           <path d="M3.5 3.5L10.5 10.5M10.5 3.5L3.5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -205,7 +222,16 @@ export function FileDropZone({ onFilesSelected, disabled }: FileDropZoneProps) {
                 </AnimatePresence>
               </div>
 
-              <div className="border-t border-border/40 p-3">
+              <div className="border-t border-border/40 p-3 flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => inputRef.current?.click()}
+                  disabled={disabled}
+                  className="w-full border-dashed border-primary/30 text-primary hover:bg-primary/10"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  Add more files
+                </Button>
                 <Button
                   onClick={handleShare}
                   disabled={disabled}

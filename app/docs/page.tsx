@@ -29,17 +29,74 @@ export default function DocsPage() {
 
         <div className="space-y-6">
           <h2 className="text-xl font-bold tracking-widest uppercase text-foreground border-b border-border/10 pb-2">Network Flow</h2>
-          <div className="p-6 bg-card/20 border border-primary/20 rounded-xl backdrop-blur-sm font-mono text-xs text-muted-foreground">
-            <pre className="text-primary/80">
-{`Client A
-   ↕ (WebSocket signaling)
-Server
-   ↕ (WebSocket signaling)
-Client B
+          <div className="relative p-8 md:p-12 bg-card/20 border border-primary/20 rounded-xl backdrop-blur-sm overflow-hidden">
+            
+            {/* Vertical Signaling Path */}
+            <div className="flex flex-col items-center gap-0">
+              {/* Client A Node */}
+              <div className="relative z-10 flex items-center gap-3 px-6 py-3 rounded-2xl border border-primary/40 bg-primary/10 backdrop-blur-md shadow-[0_0_20px_rgba(var(--primary),0.15)]">
+                <div className="w-3 h-3 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.8)] animate-pulse" />
+                <span className="text-sm font-bold tracking-widest uppercase text-primary">Client A</span>
+              </div>
 
-[ WebRTC DataChannel ]
-Direct P2P transmission happens here.`}
-            </pre>
+              {/* Animated Dashed Line A→Server */}
+              <div className="relative w-[2px] h-16">
+                <div className="absolute inset-0 border-l-2 border-dashed border-primary/40" style={{ animation: 'dashFlow 1.5s linear infinite' }} />
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-mono text-muted-foreground uppercase tracking-widest whitespace-nowrap">WebSocket Signaling</span>
+              </div>
+
+              {/* Server Node */}
+              <div className="relative z-10 flex items-center gap-3 px-6 py-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 backdrop-blur-md shadow-[0_0_20px_rgba(52,211,153,0.15)]">
+                <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
+                <span className="text-sm font-bold tracking-widest uppercase text-emerald-400">Server</span>
+              </div>
+
+              {/* Animated Dashed Line Server→B */}
+              <div className="relative w-[2px] h-16">
+                <div className="absolute inset-0 border-l-2 border-dashed border-primary/40" style={{ animation: 'dashFlow 1.5s linear infinite reverse' }} />
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-mono text-muted-foreground uppercase tracking-widest whitespace-nowrap">WebSocket Signaling</span>
+              </div>
+
+              {/* Client B Node */}
+              <div className="relative z-10 flex items-center gap-3 px-6 py-3 rounded-2xl border border-primary/40 bg-primary/10 backdrop-blur-md shadow-[0_0_20px_rgba(var(--primary),0.15)]">
+                <div className="w-3 h-3 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.8)] animate-pulse" />
+                <span className="text-sm font-bold tracking-widest uppercase text-primary">Client B</span>
+              </div>
+            </div>
+
+            {/* WebRTC DataChannel Bridge */}
+            <div className="mt-10 relative flex flex-col items-center">
+              <div className="relative w-full max-w-sm mx-auto">
+                {/* Glowing line */}
+                <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary to-transparent rounded-full shadow-[0_0_15px_rgba(var(--primary),0.6)]" />
+                
+                {/* Pulsing data particle */}
+                <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary shadow-[0_0_12px_rgba(var(--primary),0.9)]" style={{ animation: 'dataPacket 2s ease-in-out infinite' }} />
+
+                {/* Labels on each end */}
+                <div className="absolute -left-1 -top-6 text-[9px] font-mono text-primary/80 uppercase tracking-widest">A</div>
+                <div className="absolute -right-1 -top-6 text-[9px] font-mono text-primary/80 uppercase tracking-widest">B</div>
+              </div>
+
+              <div className="mt-4 flex flex-col items-center gap-1">
+                <span className="text-xs font-bold tracking-widest uppercase text-primary/90">WebRTC DataChannel</span>
+                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Direct P2P Transmission</span>
+              </div>
+            </div>
+
+            {/* Injected keyframes via style tag */}
+            <style>{`
+              @keyframes dashFlow {
+                0% { background-position: 0 0; }
+                100% { background-position: 0 20px; }
+              }
+              @keyframes dataPacket {
+                0% { left: 0%; opacity: 0; }
+                10% { opacity: 1; }
+                90% { opacity: 1; }
+                100% { left: calc(100% - 12px); opacity: 0; }
+              }
+            `}</style>
           </div>
         </div>
 

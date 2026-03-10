@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppShell } from '@/components/share/app-shell';
 import { RadarScanner } from '@/components/share/radar-scanner';
+import { FileDropZone } from '@/components/share/file-drop-zone';
 import { NearbyPeers } from '@/components/share/nearby-peers';
 import { TransferCode } from '@/components/share/transfer-code';
 import { ShareLink } from '@/components/share/share-link';
+import { QRCodeDisplay } from '@/components/share/qr-code';
 import { TransferProgress } from '@/components/share/transfer-progress';
 import { ReceivePrompt } from '@/components/share/receive-prompt';
 import { DeviceAvatar } from '@/components/share/device-avatar';
+import { Confetti } from '@/components/confetti';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useTransferStore } from '@/lib/stores/transfer-store';
@@ -77,11 +80,14 @@ function TransferErrorCard({
 
 function HomeView() {
   const [mode, setMode] = useState<'local' | 'link'>('local');
+  const [stagingFiles, setStagingFiles] = useState<File[]>([]);
   const { shareFiles, sendToPeer, joinByCode } = useTransfer();
   const files = useTransferStore((s) => s.files);
 
   const handlePeerClick = (peer: NearbyPeer) => {
-    if (files.length > 0) {
+    if (stagingFiles.length > 0) {
+      sendToPeer(peer.id, stagingFiles);
+    } else if (files.length > 0) {
       sendToPeer(peer.id, files);
     }
   };
@@ -128,7 +134,7 @@ function HomeView() {
             className="w-full h-full flex flex-col items-center justify-center relative"
           >
             {/* Visual Hero Text */}
-            <div className="absolute top-10 md:top-20 flex flex-col items-center text-center px-4 z-20 pointer-events-none">
+            <div className={`absolute top-10 md:top-20 flex flex-col items-center text-center px-4 z-20 pointer-events-none transition-opacity duration-300 ${stagingFiles.length > 0 ? 'opacity-0' : 'opacity-100'}`}>
               <h1 className="text-xl md:text-3xl font-bold tracking-widest uppercase text-foreground/90 mb-2">
                 Transmit files directly across your network
               </h1>
@@ -137,7 +143,26 @@ function HomeView() {
               </p>
             </div>
 
-            <RadarScanner onFilesSelected={shareFiles} />
+            {stagingFiles.length > 0 ? (
+              <div className="z-30 w-full max-w-md bg-background border border-primary/20 rounded-3xl p-6 shadow-[0_0_30px_rgba(var(--primary),0.1)] mb-64 lg:mb-0 mt-8 max-h-[70vh] flex flex-col">
+                <FileDropZone 
+                  initialFiles={stagingFiles} 
+                  onFilesSelected={(filesToShare) => {
+                    setStagingFiles([]);
+                    shareFiles(filesToShare);
+                  }} 
+                />
+                <Button 
+                  variant="ghost" 
+                  onClick={() => setStagingFiles([])} 
+                  className="w-full mt-4 text-muted-foreground hover:text-destructive text-xs uppercase tracking-widest font-mono"
+                >
+                  Cancel sharing
+                </Button>
+              </div>
+            ) : (
+              <RadarScanner onFilesSelected={setStagingFiles} />
+            )}
 
             {/* Nearby Devices Panel */}
             <div className="fixed right-6 top-32 bottom-6 w-80 hidden lg:flex flex-col gap-4 z-30">
@@ -261,6 +286,7 @@ function SendingView() {
           </div>
 
           {shareLink && <ShareLink link={shareLink} />}
+          {shareLink && <QRCodeDisplay value={shareLink} />}
         </motion.div>
       )}
 
@@ -287,6 +313,9 @@ function SendingView() {
 
       {/* Progress */}
       {(status === 'transferring' || status === 'complete') && <TransferProgress />}
+
+      {/* Confetti on complete */}
+      {status === 'complete' && <Confetti />}
 
       {/* Error details */}
       {status === 'error' && (
@@ -384,6 +413,9 @@ function ReceivingView() {
 
       {/* Progress */}
       {(status === 'transferring' || status === 'complete') && <TransferProgress />}
+
+      {/* Confetti on complete */}
+      {status === 'complete' && <Confetti />}
 
       {/* Error details */}
       {status === 'error' && (
