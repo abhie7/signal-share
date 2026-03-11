@@ -59,17 +59,19 @@ export function useTransfer() {
     if (status === 'complete' && sessionId && historySavedForSession.current !== sessionId) {
       historySavedForSession.current = sessionId;
       const state = useTransferStore.getState();
-      const filesToSave = state.fileInfos.length > 0 ? state.fileInfos : state.files.map(f => ({ name: f.name, size: f.size }));
+
+      const fallbackFiles = state.incomingTransfer?.files || state.files.map((f) => ({ name: f.name, size: f.size }));
+      const filesToSave = state.fileInfos.length > 0 ? state.fileInfos : fallbackFiles;
       const totalSize = filesToSave.reduce((acc, f) => acc + f.size, 0);
-      
+
       historyDB.addTransaction({
         id: sessionId,
         type: role === 'sender' ? 'sent' : 'received',
         peerName: state.remotePeerName || 'Unknown Peer',
-        files: filesToSave.map(f => ({ name: f.name, size: f.size })),
+        files: filesToSave.map((f) => ({ name: f.name, size: f.size })),
         totalSize,
         timestamp: Date.now(),
-      }).catch(err => console.error("Failed to save history", err));
+      }).catch((err) => console.error('Failed to save history', err));
     }
   }, [status, sessionId, role]);
 

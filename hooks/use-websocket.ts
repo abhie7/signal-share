@@ -17,6 +17,7 @@ export function useWebSocket() {
     setRemotePeer,
     setTransferMode,
     setIncomingTransfer,
+    setFileInfos,
     updateProgress,
     setRole,
   } = useTransferStore();
@@ -95,10 +96,13 @@ export function useWebSocket() {
     // Session joined (receiver side)
     cleanups.push(
       signaling.on('session-joined', (msg) => {
+        const incomingFiles = msg.files as Array<{ name: string; size: number; type: string }>;
+
         setStatus('connecting');
         setRole('receiver');
         setTransferMode(msg.transferMode as 'local' | 'remote');
         setRemotePeer(msg.senderName as string, msg.senderId as string);
+        setFileInfos(incomingFiles || []);
         // Store sessionId so the receiver can set up WebRTC
         setSession({
           sessionId: msg.sessionId as string,
@@ -119,13 +123,15 @@ export function useWebSocket() {
     // Incoming transfer request (nearby peer sends to you)
     cleanups.push(
       signaling.on('incoming-transfer', (msg) => {
+        const incomingFiles = msg.files as Array<{ name: string; size: number; type: string }>;
         setIncomingTransfer({
           sessionId: msg.sessionId as string,
           senderId: msg.senderId as string,
           senderName: msg.senderName as string,
-          files: msg.files as Array<{ name: string; size: number; type: string }>,
+          files: incomingFiles,
           totalSize: msg.totalSize as number,
         });
+        setFileInfos(incomingFiles);
       }),
     );
 
