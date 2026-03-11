@@ -82,6 +82,7 @@ interface TransferState {
   setRemotePeer: (name: string, id: string) => void;
   updateProgress: (progress: Partial<TransferProgress>) => void;
   setIncomingTransfer: (transfer: IncomingTransfer | null) => void;
+  setFileInfos: (fileInfos: FileInfo[]) => void;
   addReceivedFile: (file: { blob: Blob; name: string; type: string }) => void;
   reset: () => void;
 }
@@ -158,6 +159,8 @@ export const useTransferStore = create<TransferState>((set) => ({
     })),
 
   setIncomingTransfer: (transfer) => set({ incomingTransfer: transfer }),
+
+  setFileInfos: (fileInfos) => set({ fileInfos }),
 
   addReceivedFile: (file) =>
     set((state) => ({
