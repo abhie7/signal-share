@@ -8,6 +8,24 @@ export const metadata = {
 
 const changelogs = [
   {
+    date: 'April 3, 2026',
+    version: '1.2.1',
+    changes: [
+      {
+        type: 'fix',
+        title: 'Drag & Drop Behavior Improvements',
+        description:
+          'Fixed an issue where the global drag-and-drop overlay would not consistently appear on certain browsers or when dragging from specific sources. Improved event handling to ensure reliable detection of drag events across all supported platforms.',
+      },
+      {
+        type: 'fix',
+        title: 'Large Folder Upload Performance',
+        description:
+          'Improved performance and memory usage when uploading large folders by optimizing the zipping process and streaming files directly to WebRTC without full in-memory buffering. Displaying a fallback loader for large uploads to improve user feedback during processing.',
+      },
+    ]
+  },
+  {
     date: 'March 10, 2026',
     version: 'v1.2.0',
     changes: [

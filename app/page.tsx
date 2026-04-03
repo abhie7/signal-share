@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppShell } from '@/components/share/app-shell';
 import { RadarScanner } from '@/components/share/radar-scanner';
@@ -83,6 +83,24 @@ function HomeView() {
   const [stagingFiles, setStagingFiles] = useState<File[]>([]);
   const { shareFiles, sendToPeer, joinByCode } = useTransfer();
   const files = useTransferStore((s) => s.files);
+
+  useEffect(() => {
+    const handleStageFiles = (e: Event) => {
+      const customEvent = e as CustomEvent<File[]>;
+      const incomingFiles = customEvent.detail || [];
+      if (incomingFiles.length === 0) {
+        return;
+      }
+
+      setMode('local');
+      setStagingFiles((prev) => [...prev, ...incomingFiles]);
+    };
+
+    window.addEventListener('signalshare:stage-files', handleStageFiles as EventListener);
+    return () => {
+      window.removeEventListener('signalshare:stage-files', handleStageFiles as EventListener);
+    };
+  }, []);
 
   const handlePeerClick = (peer: NearbyPeer) => {
     if (stagingFiles.length > 0) {

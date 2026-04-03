@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { formatBytes } from '@/lib/webrtc/file-chunker';
@@ -30,6 +30,23 @@ export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDr
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>(initialFiles || []);
   const inputRef = useRef<HTMLInputElement>(null);
+  const syncedExternalCountRef = useRef(initialFiles?.length || 0);
+
+  useEffect(() => {
+    const externalFiles = initialFiles || [];
+    if (externalFiles.length === 0) {
+      syncedExternalCountRef.current = 0;
+      return;
+    }
+
+    if (externalFiles.length <= syncedExternalCountRef.current) {
+      return;
+    }
+
+    const newlyStaged = externalFiles.slice(syncedExternalCountRef.current);
+    syncedExternalCountRef.current = externalFiles.length;
+    setSelectedFiles((prev) => [...prev, ...newlyStaged]);
+  }, [initialFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -48,17 +65,16 @@ export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDr
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
-
-      setIsProcessing(true);
       try {
-        const files = await processDataTransfer(e.dataTransfer);
+        const files = await processDataTransfer(e.dataTransfer, {
+          slowThresholdMs: 400,
+          onSlowProcessingChange: setIsProcessing,
+        });
         if (files.length > 0) {
           setSelectedFiles((prev) => [...prev, ...files]);
         }
       } catch (err) {
         console.error('Error processing dropped items', err);
-      } finally {
-        setIsProcessing(false);
       }
     },
     [],
