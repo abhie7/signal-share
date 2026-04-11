@@ -1,5 +1,5 @@
 export default {
-  extends: ['stylelint-config-standard'],
+  extends: [],
   rules: {
     'at-rule-no-unknown': [
       true,
