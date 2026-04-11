@@ -100,11 +100,16 @@ export function GlobalDropZone() {
       setIsDragging(false);
 
       if (!e.dataTransfer) return;
-      const files = await processDataTransfer(e.dataTransfer, {
-        slowThresholdMs: 400,
-        onSlowProcessingChange: setIsProcessingDrop,
-      });
-      if (files.length > 0) {
+      try {
+        const files = await processDataTransfer(e.dataTransfer, {
+          slowThresholdMs: 400,
+          onSlowProcessingChange: setIsProcessingDrop,
+        });
+        if (files.length > 0) {
+          stageFilesForHomeView(files);
+        }
+      } catch (err) {
+        console.error('Error processing dropped items', err);
         stageFilesForHomeView(files);
       }
     };
