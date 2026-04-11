@@ -119,7 +119,10 @@ function HomeView() {
         return;
       }
 
-      try {
+      if (textStatus === 'sending') {
+        return;
+      }
+
         setTextStatus('sending');
         setTextStatusMessage(`Encrypting for ${peer.name}...`);
         await sendEncryptedText(peer.id, message);
