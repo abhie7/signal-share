@@ -75,7 +75,7 @@ class SessionRegistry {
     const session: TransferSession = {
       id,
       code,
-      transferType,
+      transferType: transferType === 'text' ? 'text' : 'file',
       senderId,
       senderName,
       files,
