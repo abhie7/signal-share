@@ -580,7 +580,37 @@ function ReceivingView() {
 
 export default function Home() {
   const view = useAppStore((s) => s.view);
-  const { acceptIncoming, declineIncoming, dismissIncomingTransfer } = useTransfer();
+  const setView = useAppStore((s) => s.setView);
+  const setIncomingTransfer = useTransferStore((s) => s.setIncomingTransfer);
+
+  const acceptIncoming = (incomingSessionId: string, senderId: string) => {
+    const state = useTransferStore.getState();
+    const senderName = state.incomingTransfer?.senderName ?? 'Unknown';
+
+    state.setRole('receiver');
+    state.setTransferKind('file');
+    state.setStatus('connecting');
+    state.setSession({ sessionId: incomingSessionId, code: '' });
+    state.setRemotePeer(senderName, senderId);
+    setView('receiving');
+
+    void import('@/lib/webrtc/signaling').then(({ signaling }) => {
+      signaling.send({ type: 'accept-transfer', sessionId: incomingSessionId });
+    });
+
+    setIncomingTransfer(null);
+  };
+
+  const declineIncoming = (incomingSessionId: string) => {
+    void import('@/lib/webrtc/signaling').then(({ signaling }) => {
+      signaling.send({ type: 'decline-transfer', sessionId: incomingSessionId });
+    });
+    setIncomingTransfer(null);
+  };
+
+  const dismissIncomingTransfer = () => {
+    setIncomingTransfer(null);
+  };
 
   return (
     <AppShell>
