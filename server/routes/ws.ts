@@ -61,9 +61,9 @@ function cleanupPeer(peerId: string, subnet: string): void {
 
   const senderSessions = sessionRegistry.getSessionsBySender(peerId);
   for (const session of senderSessions) {
-    if (session.status === 'waiting' || session.status === 'connecting') {
-      sessionRegistry.remove(session.id);
-    } else if (session.status === 'transferring') {
+    if (session.status === 'waiting') {
+          sessionRegistry.remove(session.id);
+        } else if (session.status === 'connecting' || session.status === 'transferring') {
       session.status = 'cancelled';
       if (session.receiverWs) {
         safeSend(session.receiverWs, {
