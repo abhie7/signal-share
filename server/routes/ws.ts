@@ -340,7 +340,7 @@ function handleTransferCancel(peerId: string, msg: WsMessage): void {
   const sessionId = msg.sessionId as string;
   const session = sessionRegistry.getById(sessionId);
   if (!session) return;
-  session.status = 'cancelled';
+    if (peerId !== session.senderId && peerId !== session.receiverId) return;
   const targetWs = peerId === session.senderId ? session.receiverWs : session.senderWs;
   if (targetWs) {
     safeSend(targetWs, { type: 'transfer-cancelled', sessionId });
