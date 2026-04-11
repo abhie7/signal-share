@@ -38,6 +38,7 @@ async function readAllDirectoryEntries(entry: WebkitFileSystemEntry): Promise<We
   const dirReader = entry.createReader();
   const allEntries: WebkitFileSystemEntry[] = [];
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const batch = await new Promise<WebkitFileSystemEntry[]>((resolve, reject) => {
       dirReader.readEntries(resolve, reject);
@@ -125,9 +126,8 @@ export async function processDataTransfer(
     // Give React a chance to paint loader state before heavy folder traversal starts.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    for (const entry of entries) {
-      await addEntryToZip(entry, zip);
-    }
+    const tasks = entries.map((entry) => async () => addEntryToZip(entry, zip));
+    await runWithConcurrency(tasks, CONCURRENCY_LIMIT);
 
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     const folderName = entries.length === 1 && entries[0]?.name ? entries[0].name : 'Archive';

@@ -7,6 +7,13 @@ import { useAppStore } from '@/lib/stores/app-store';
 import { useWebRTC } from './use-webrtc';
 import { useRelay } from './use-relay';
 import { historyDB } from '@/lib/db/history';
+import {
+  deriveSharedAesKey,
+  encryptText,
+  exportPublicKey,
+  generateEcdhKeyPair,
+  importPublicKey,
+} from '@/lib/crypto/text-transfer';
 
 export function useTransfer() {
   const {
@@ -17,10 +24,15 @@ export function useTransfer() {
     shareLink,
     status,
     role,
+    pendingText,
     remotePeerId,
+    transferKind,
     transferMode,
     setFiles,
+    setPendingText,
     setRole,
+    setTransferKind,
+    setErrorDetails,
     setStatus,
     setIncomingTransfer,
     reset,
@@ -54,14 +66,14 @@ export function useTransfer() {
   // ── Save Transfer History on Complete ──
   // When status becomes 'complete', log it to the IndexedDB
   const historySavedForSession = useRef<string | null>(null);
-  
+
   useEffect(() => {
     if (status === 'complete' && sessionId && historySavedForSession.current !== sessionId) {
       historySavedForSession.current = sessionId;
       const state = useTransferStore.getState();
       const filesToSave = state.fileInfos.length > 0 ? state.fileInfos : state.files.map(f => ({ name: f.name, size: f.size }));
       const totalSize = filesToSave.reduce((acc, f) => acc + f.size, 0);
-      
+
       historyDB.addTransaction({
         id: sessionId,
         type: role === 'sender' ? 'sent' : 'received',
@@ -70,6 +82,7 @@ export function useTransfer() {
         totalSize,
         timestamp: Date.now(),
       }).catch(err => console.error("Failed to save history", err));
+
     }
   }, [status, sessionId, role]);
 
@@ -84,7 +97,7 @@ export function useTransfer() {
   // Set up PeerConnectionManager to listen for the sender's offer,
   // then signal readiness so the sender can create the offer.
   useEffect(() => {
-    if (status === 'connecting' && role === 'receiver' && remotePeerId && sessionId) {
+    if (status === 'connecting' && role === 'receiver' && remotePeerId && sessionId && transferKind === 'file') {
       console.log('[useTransfer] Receiver connecting, setting up WebRTC...', { remotePeerId, sessionId });
       // Guard: only set up once per transfer
       if (receiverSetupDone.current) return;
@@ -100,7 +113,7 @@ export function useTransfer() {
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, role, remotePeerId, transferMode, sessionId]);
+  }, [status, role, remotePeerId, transferMode, sessionId, transferKind]);
 
   // ── Listen for receiver-rtc-ready (sender side) ──
   // This is the single trigger for the sender to start the WebRTC offer.
@@ -112,11 +125,16 @@ export function useTransfer() {
       const sid = msg.sessionId as string;
       const receiverId = msg.fromId as string;
       const state = useTransferStore.getState();
-      if (state.role === 'sender' && state.files.length > 0 && receiverId) {
+      if (state.role === 'sender' && state.transferKind === 'file' && state.files.length > 0 && receiverId) {
         console.log('[useTransfer] Sender starting RTC transfer to', receiverId);
         rtcStart(receiverId, sid, state.files);
       } else {
-        console.warn('[useTransfer] receiver-rtc-ready ignored:', { role: state.role, fileCount: state.files.length, receiverId });
+        console.warn('[useTransfer] receiver-rtc-ready ignored:', {
+          role: state.role,
+          transferKind: state.transferKind,
+          fileCount: state.files.length,
+          receiverId,
+        });
       }
     });
     return cleanup;
@@ -129,7 +147,7 @@ export function useTransfer() {
     const cleanup = signaling.on('receiver-ready', (msg) => {
       const sid = msg.sessionId as string;
       const state = useTransferStore.getState();
-      if (state.role === 'sender' && state.files.length > 0) {
+      if (state.role === 'sender' && state.transferKind === 'file' && state.files.length > 0) {
         // Only start relay if we are not already transferring via WebRTC
         if (state.status !== 'transferring') {
           startRelayTransfer(sid, state.files);
@@ -155,14 +173,15 @@ export function useTransfer() {
       }),
     ];
     return () => cleanups.forEach((c) => c());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rtcCleanup, cleanupRelay]);
 
   // Share files — create session
   const shareFiles = useCallback(
     (selectedFiles: File[]) => {
       setFiles(selectedFiles);
+      setPendingText(null);
       setRole('sender');
+      setTransferKind('file');
       setView('sending');
 
       const infos = selectedFiles.map((f) => ({
@@ -173,17 +192,21 @@ export function useTransfer() {
 
       signaling.send({
         type: 'create-session',
+        transferType: 'file',
         files: infos,
       });
+
     },
-    [setFiles, setRole, setView],
+    [setFiles, setPendingText, setRole, setTransferKind, setView],
   );
 
   // Send to a specific nearby peer
   const sendToPeer = useCallback(
     (targetPeerId: string, selectedFiles: File[]) => {
       setFiles(selectedFiles);
+      setPendingText(null);
       setRole('sender');
+      setTransferKind('file');
       setView('sending');
 
       const infos = selectedFiles.map((f) => ({
@@ -198,7 +221,30 @@ export function useTransfer() {
         files: infos,
       });
     },
-    [setFiles, setRole, setView],
+    [setFiles, setPendingText, setRole, setTransferKind, setView],
+  );
+
+  const shareText = useCallback(
+    (text: string) => {
+      const value = text.trim();
+      if (!value) {
+        throw new Error('Text cannot be empty');
+      }
+
+      setFiles([]);
+      setPendingText(value);
+      setRole('sender');
+      setTransferKind('text');
+      setView('sending');
+
+      signaling.send({
+        type: 'create-session',
+        transferType: 'text',
+        textLength: value.length,
+        files: [],
+      });
+    },
+    [setFiles, setPendingText, setRole, setTransferKind, setView],
   );
 
   // Join by code
@@ -225,6 +271,7 @@ export function useTransfer() {
   const acceptIncoming = useCallback(
     (incomingSessionId: string, senderId: string) => {
       setRole('receiver');
+      setTransferKind('file');
       setView('receiving');
       signaling.send({ type: 'accept-transfer', sessionId: incomingSessionId });
       setIncomingTransfer(null);
@@ -237,7 +284,7 @@ export function useTransfer() {
         sessionId: incomingSessionId,
       });
     },
-    [setRole, setView, setIncomingTransfer, rtcReceive],
+    [setRole, setTransferKind, setView, setIncomingTransfer, rtcReceive],
   );
 
   // Decline incoming transfer
@@ -264,10 +311,10 @@ export function useTransfer() {
   // Force relay mode (can be called if WebRTC is stuck)
   const forceRelay = useCallback(() => {
     if (!sessionId || !remotePeerId) return;
-    
+
     // Stop WebRTC
     rtcCleanup();
-    
+
     if (role === 'sender') {
       setStatus('connecting');
     } else {
@@ -283,6 +330,112 @@ export function useTransfer() {
     setView('home');
   }, [rtcCleanup, reset, setView]);
 
+  const sendEncryptedText = useCallback(async (targetPeerId: string, plainText: string, activeSessionId?: string) => {
+    const text = plainText.trim();
+    if (!text) {
+      throw new Error('Text cannot be empty');
+    }
+
+    const senderKeys = await generateEcdhKeyPair();
+    const senderPublicKey = await exportPublicKey(senderKeys.publicKey);
+    const requestId = crypto.randomUUID();
+
+    const receiverPublicKeyJwk = await new Promise<JsonWebKey>((resolve, reject) => {
+      let done = false;
+
+      const cleanup = () => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timeoutId);
+        unsubscribe();
+      };
+
+      const unsubscribe = signaling.on('text-key-response', (msg) => {
+        if (msg.requestId !== requestId || msg.fromId !== targetPeerId) {
+          return;
+        }
+
+        const key = msg.receiverPublicKey as JsonWebKey | undefined;
+        cleanup();
+        if (!key) {
+          reject(new Error('Receiver key exchange failed'));
+          return;
+        }
+        resolve(key);
+      });
+
+      const timeoutId = window.setTimeout(() => {
+        cleanup();
+        reject(new Error('Timed out waiting for receiver key exchange'));
+      }, 10000);
+
+      signaling.send({
+        type: 'text-key-request',
+        targetId: targetPeerId,
+        requestId,
+        senderPublicKey,
+      });
+    });
+
+    const receiverPublicKey = await importPublicKey(receiverPublicKeyJwk);
+    const aesKey = await deriveSharedAesKey(senderKeys.privateKey, receiverPublicKey);
+    const payload = await encryptText(text, aesKey);
+
+    signaling.send({
+      type: 'text-message',
+      targetId: targetPeerId,
+      requestId,
+      sessionId: activeSessionId,
+      iv: payload.iv,
+      ciphertext: payload.ciphertext,
+    });
+
+    if (activeSessionId) {
+      signaling.send({ type: 'transfer-complete', sessionId: activeSessionId });
+    }
+  }, []);
+
+  const textSessionSentRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (role !== 'sender' || transferKind !== 'text' || status !== 'connecting' || !remotePeerId || !pendingText) {
+      return;
+    }
+
+    if (sessionId && textSessionSentRef.current === sessionId) {
+      return;
+    }
+
+    if (sessionId) {
+      textSessionSentRef.current = sessionId;
+    }
+
+    setStatus('transferring');
+    sendEncryptedText(remotePeerId, pendingText, sessionId || undefined)
+      .then(() => {
+        setStatus('complete');
+        setPendingText(null);
+      })
+      .catch((error) => {
+        setErrorDetails(error instanceof Error ? error.message : 'Failed to send encrypted text', { code: 'TEXT_SEND_FAILED' });
+      });
+  }, [
+    pendingText,
+    remotePeerId,
+    role,
+    sendEncryptedText,
+    sessionId,
+    setErrorDetails,
+    setPendingText,
+    setStatus,
+    status,
+    transferKind,
+  ]);
+
+  const dismissIncomingTransfer = useCallback(() => {
+    setIncomingTransfer(null);
+  }, [setIncomingTransfer]);
+
   return {
     files,
     fileInfos,
@@ -293,6 +446,7 @@ export function useTransfer() {
     role,
     transferMode,
     shareFiles,
+    shareText,
     sendToPeer,
     joinByCode,
     joinByLink,
@@ -301,5 +455,7 @@ export function useTransfer() {
     cancelTransfer,
     goHome,
     forceRelay,
+    sendEncryptedText,
+    dismissIncomingTransfer,
   };
 }

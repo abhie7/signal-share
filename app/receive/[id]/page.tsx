@@ -17,6 +17,7 @@ import { Alert01Icon, SecurityLockIcon } from '@hugeicons/core-free-icons';
 interface SessionInfo {
   id: string;
   code: string;
+  transferType: 'file' | 'text';
   senderName: string;
   files: Array<{ name: string; size: number; type: string }>;
   totalSize: number;
@@ -130,25 +131,37 @@ export default function ReceivePage() {
                 </div>
 
                 <div className="w-full rounded-xl border border-border/20 bg-card/30 p-3 space-y-2">
-                  {sessionInfo.files.map((file, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.1 + i * 0.05 }}
-                      className="flex items-center justify-between text-xs font-mono"
-                    >
-                      <span className="truncate text-foreground/80 pr-2">{file.name}</span>
-                      <span className="text-primary/80 shrink-0">
-                        {formatBytes(file.size)}
-                      </span>
-                    </motion.div>
-                  ))}
+                  {sessionInfo.transferType === 'text' ? (
+                    <>
+                      <p className="text-xs font-mono text-foreground/80">Encrypted text message</p>
+                      <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
+                        <span>TEXT PAYLOAD</span>
+                        <span>{sessionInfo.totalSize} CHARS</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {sessionInfo.files.map((file, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 + i * 0.05 }}
+                          className="flex items-center justify-between text-xs font-mono"
+                        >
+                          <span className="truncate text-foreground/80 pr-2">{file.name}</span>
+                          <span className="text-primary/80 shrink-0">
+                            {formatBytes(file.size)}
+                          </span>
+                        </motion.div>
+                      ))}
 
-                  <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
-                    <span>{sessionInfo.files.length} FILE{sessionInfo.files.length !== 1 ? 'S' : ''}</span>
-                    <span>{formatBytes(sessionInfo.totalSize)} TOTAL</span>
-                  </div>
+                      <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
+                        <span>{sessionInfo.files.length} FILE{sessionInfo.files.length !== 1 ? 'S' : ''}</span>
+                        <span>{formatBytes(sessionInfo.totalSize)} TOTAL</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {!isConnected && (
@@ -165,7 +178,9 @@ export default function ReceivePage() {
                   <Button
                     variant="outline"
                     className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 font-mono uppercase tracking-widest text-xs"
-                    onClick={() => window.location.href = '/'}
+                    onClick={() => {
+                      window.location.href = '/';
+                    }}
                   >
                     Reject
                   </Button>
@@ -190,8 +205,8 @@ export default function ReceivePage() {
               <div className="text-center space-y-2">
                 <h1 className="text-2xl font-bold tracking-widest uppercase text-foreground/90">
                   {status === 'connecting' && 'Establishing Link'}
-                  {status === 'transferring' && 'Receiving Data'}
-                  {status === 'complete' && 'Transmission Complete'}
+                  {status === 'transferring' && (sessionInfo.transferType === 'text' ? 'Receiving Encrypted Text' : 'Receiving Data')}
+                  {status === 'complete' && (sessionInfo.transferType === 'text' ? 'Message Received' : 'Transmission Complete')}
                   {status === 'error' && 'Transmission Failed'}
                 </h1>
                 <div className="flex items-center justify-center gap-2">
@@ -222,7 +237,13 @@ export default function ReceivePage() {
                 </motion.div>
               )}
 
-              {(status === 'transferring' || status === 'complete') && <TransferProgress />}
+              {sessionInfo.transferType === 'file' && (status === 'transferring' || status === 'complete') && <TransferProgress />}
+
+              {sessionInfo.transferType === 'text' && status === 'transferring' && (
+                <div className="rounded-2xl border border-primary/20 bg-card/20 px-6 py-4 text-xs font-mono uppercase tracking-widest text-primary text-center">
+                  Waiting for secure text payload...
+                </div>
+              )}
 
               <div className="flex justify-center">
                 {status === 'complete' ? (

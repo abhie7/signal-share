@@ -18,6 +18,7 @@ import {
   Folder01Icon as FolderIcon,
   Download04Icon as DownloadIcon
 } from '@hugeicons/core-free-icons';
+import Image from 'next/image';
 
 interface FileDropZoneProps {
   onFilesSelected: (files: File[]) => void;
@@ -211,7 +212,7 @@ export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDr
                       className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 group"
                     >
                       {file.type.startsWith('image/') ? (
-                        <img
+                        <Image
                           src={URL.createObjectURL(file)}
                           alt={file.name}
                           className="w-8 h-8 rounded-md object-cover shrink-0"
@@ -221,6 +222,7 @@ export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDr
                             const src = (e.target as HTMLImageElement).src;
                             setTimeout(() => URL.revokeObjectURL(src), 1000);
                           }}
+                          unoptimized
                         />
                       ) : (
                         <span className="text-lg shrink-0">{getFileIcon(file.type)}</span>

@@ -14,6 +14,7 @@ import { ReceivePrompt } from '@/components/share/receive-prompt';
 import { DeviceAvatar } from '@/components/share/device-avatar';
 import { Confetti } from '@/components/confetti';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { useTransfer } from '@/hooks/use-transfer';
@@ -81,7 +82,10 @@ function TransferErrorCard({
 function HomeView() {
   const [mode, setMode] = useState<'local' | 'link'>('local');
   const [stagingFiles, setStagingFiles] = useState<File[]>([]);
-  const { shareFiles, sendToPeer, joinByCode } = useTransfer();
+  const [textDraft, setTextDraft] = useState('');
+  const [textStatus, setTextStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [textStatusMessage, setTextStatusMessage] = useState('');
+  const { shareFiles, shareText, sendToPeer, joinByCode, sendEncryptedText } = useTransfer();
   const files = useTransferStore((s) => s.files);
 
   useEffect(() => {
@@ -102,11 +106,31 @@ function HomeView() {
     };
   }, []);
 
-  const handlePeerClick = (peer: NearbyPeer) => {
+  const handlePeerClick = async (peer: NearbyPeer) => {
     if (stagingFiles.length > 0) {
       sendToPeer(peer.id, stagingFiles);
     } else if (files.length > 0) {
       sendToPeer(peer.id, files);
+    } else {
+      const message = textDraft.trim();
+      if (!message) {
+        setTextStatus('error');
+        setTextStatusMessage('Write a text snippet first');
+        return;
+      }
+
+      try {
+        setTextStatus('sending');
+        setTextStatusMessage(`Encrypting for ${peer.name}...`);
+        await sendEncryptedText(peer.id, message);
+        setTextStatus('sent');
+        setTextStatusMessage(`Encrypted message sent to ${peer.name}`);
+        setTextDraft('');
+      } catch (error) {
+        console.error('Encrypted text send failed:', error);
+        setTextStatus('error');
+        setTextStatusMessage(error instanceof Error ? error.message : 'Failed to send encrypted text');
+      }
     }
   };
 
@@ -179,7 +203,52 @@ function HomeView() {
                 </Button>
               </div>
             ) : (
-              <RadarScanner onFilesSelected={setStagingFiles} />
+              <div className="w-full flex flex-col items-center gap-6">
+                <RadarScanner onFilesSelected={setStagingFiles} />
+
+                <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card/20 p-4 backdrop-blur-md shadow-[0_0_20px_rgba(var(--primary),0.08)]">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-xs font-mono uppercase tracking-widest text-foreground/80">Encrypted text snippet</p>
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Click any nearby node to send</p>
+                  </div>
+                  <Textarea
+                    value={textDraft}
+                    onChange={(e) => {
+                      setTextDraft(e.target.value);
+                      if (textStatus !== 'idle') {
+                        setTextStatus('idle');
+                        setTextStatusMessage('');
+                      }
+                    }}
+                    maxLength={4000}
+                    placeholder="Type a note, password, or quick instruction..."
+                    className="min-h-24 bg-background/50"
+                  />
+                  <div className="mt-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider">
+                    <span className={`${textStatus === 'error' ? 'text-destructive' : textStatus === 'sent' ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                      {textStatusMessage || 'Payload is encrypted before delivery'}
+                    </span>
+                    <span className="text-muted-foreground">{textDraft.length}/4000</span>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      try {
+                        shareText(textDraft);
+                        setTextStatus('idle');
+                        setTextStatusMessage('');
+                        setTextDraft('');
+                      } catch (error) {
+                        setTextStatus('error');
+                        setTextStatusMessage(error instanceof Error ? error.message : 'Failed to create text session');
+                      }
+                    }}
+                    variant="outline"
+                    className="w-full mt-3 border-primary/30 text-primary hover:bg-primary/10 font-mono uppercase tracking-widest text-xs"
+                  >
+                    Share Text via Code/Link/QR
+                  </Button>
+                </div>
+              </div>
             )}
 
             {/* Nearby Devices Panel */}
@@ -237,6 +306,7 @@ function HomeView() {
 
 function SendingView() {
   const { transferCode, shareLink, status, cancelTransfer, goHome } = useTransfer();
+  const transferKind = useTransferStore((s) => s.transferKind);
   const remotePeerName = useTransferStore((s) => s.remotePeerName);
   const error = useTransferStore((s) => s.error);
   const errorDetails = useTransferStore((s) => s.errorDetails);
@@ -259,8 +329,8 @@ function SendingView() {
         >
           {status === 'waiting' && 'Awaiting Connection'}
           {status === 'connecting' && 'Establishing Link'}
-          {status === 'transferring' && 'Transmitting Data'}
-          {status === 'complete' && 'Transmission Complete'}
+          {status === 'transferring' && (transferKind === 'text' ? 'Sending Encrypted Text' : 'Transmitting Data')}
+          {status === 'complete' && (transferKind === 'text' ? 'Message Delivered' : 'Transmission Complete')}
           {status === 'error' && 'Transmission Failed'}
           {status === 'cancelled' && 'Transmission Aborted'}
         </motion.h1>
@@ -354,7 +424,13 @@ function SendingView() {
       )}
 
       {/* Progress */}
-      {(status === 'transferring' || status === 'complete') && <TransferProgress />}
+      {transferKind === 'file' && (status === 'transferring' || status === 'complete') && <TransferProgress />}
+
+      {transferKind === 'text' && status === 'transferring' && (
+        <div className="rounded-2xl border border-primary/20 bg-card/20 px-6 py-4 text-xs font-mono uppercase tracking-widest text-primary">
+          Encrypting and delivering message payload...
+        </div>
+      )}
 
       {/* Confetti on complete */}
       {status === 'complete' && <Confetti />}
@@ -394,6 +470,7 @@ function SendingView() {
 
 function ReceivingView() {
   const { status, goHome, cancelTransfer } = useTransfer();
+  const transferKind = useTransferStore((s) => s.transferKind);
   const remotePeerName = useTransferStore((s) => s.remotePeerName);
   const error = useTransferStore((s) => s.error);
   const errorDetails = useTransferStore((s) => s.errorDetails);
@@ -415,8 +492,8 @@ function ReceivingView() {
           animate={{ opacity: 1, y: 0 }}
         >
           {status === 'connecting' && 'Establishing Link'}
-          {status === 'transferring' && 'Receiving Data'}
-          {status === 'complete' && 'Transmission Complete'}
+          {status === 'transferring' && (transferKind === 'text' ? 'Receiving Encrypted Text' : 'Receiving Data')}
+          {status === 'complete' && (transferKind === 'text' ? 'Message Received' : 'Transmission Complete')}
           {status === 'error' && 'Transmission Failed'}
           {status === 'cancelled' && 'Transmission Aborted'}
         </motion.h1>
@@ -454,7 +531,13 @@ function ReceivingView() {
       )}
 
       {/* Progress */}
-      {(status === 'transferring' || status === 'complete') && <TransferProgress />}
+      {transferKind === 'file' && (status === 'transferring' || status === 'complete') && <TransferProgress />}
+
+      {transferKind === 'text' && status === 'transferring' && (
+        <div className="rounded-2xl border border-primary/20 bg-card/20 px-6 py-4 text-xs font-mono uppercase tracking-widest text-primary">
+          Waiting for secure text payload...
+        </div>
+      )}
 
       {/* Confetti on complete */}
       {status === 'complete' && <Confetti />}
@@ -494,7 +577,7 @@ function ReceivingView() {
 
 export default function Home() {
   const view = useAppStore((s) => s.view);
-  const { acceptIncoming, declineIncoming } = useTransfer();
+  const { acceptIncoming, declineIncoming, dismissIncomingTransfer } = useTransfer();
 
   return (
     <AppShell>
@@ -516,7 +599,7 @@ export default function Home() {
       )}
 
       {/* Incoming transfer modal */}
-      <ReceivePrompt onAccept={acceptIncoming} onDecline={declineIncoming} />
+      <ReceivePrompt onAccept={acceptIncoming} onDecline={declineIncoming} onDismissText={dismissIncomingTransfer} />
     </AppShell>
   );
 }

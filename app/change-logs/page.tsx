@@ -8,17 +8,29 @@ export const metadata = {
 
 const changelogs = [
   {
-    date: 'April 3, 2026',
+    date: 'April 11, 2026',
     version: '1.2.1',
     changes: [
       {
-        type: 'fix',
+        type: 'new',
+        title: 'Now Send Encrypted Text Messages',
+        description:
+          'Users can now send encrypted text messages alongside file transfers. This allows for secure communication of transfer details, instructions, or any other information without leaving the app.',
+      },
+      {
+        type: 'new',
+        title: 'Copy and Paste File Transfers',
+        description:
+          'Users can now copy files to their clipboard and paste them directly into the app to initiate a transfer. This provides an alternative to drag-and-drop for quick sharing.',
+      },
+      {
+        type: 'improvement',
         title: 'Drag & Drop Behavior Improvements',
         description:
           'Fixed an issue where the global drag-and-drop overlay would not consistently appear on certain browsers or when dragging from specific sources. Improved event handling to ensure reliable detection of drag events across all supported platforms.',
       },
       {
-        type: 'fix',
+        type: 'improvement',
         title: 'Large Folder Upload Performance',
         description:
           'Improved performance and memory usage when uploading large folders by optimizing the zipping process and streaming files directly to WebRTC without full in-memory buffering. Displaying a fallback loader for large uploads to improve user feedback during processing.',

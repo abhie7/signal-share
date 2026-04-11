@@ -28,11 +28,13 @@ export interface TransferProgress {
 }
 
 export interface IncomingTransfer {
+  transferType: 'file' | 'text';
   sessionId: string;
   senderId: string;
   senderName: string;
   files: FileInfo[];
   totalSize: number;
+  textContent?: string;
 }
 
 export interface ErrorDetails {
@@ -51,9 +53,11 @@ interface TransferState {
   transferCode: string | null;
   shareLink: string | null;
   transferMode: 'local' | 'remote' | null;
+  transferKind: 'file' | 'text' | null;
   status: TransferStatus;
   role: TransferRole;
   error: string | null;
+  pendingText: string | null;
 
   // Remote peer info
   remotePeerName: string | null;
@@ -75,8 +79,10 @@ interface TransferState {
   setFiles: (files: File[]) => void;
   setSession: (data: { sessionId: string; code: string; shareLink?: string }) => void;
   setTransferMode: (mode: 'local' | 'remote') => void;
+  setTransferKind: (kind: 'file' | 'text' | null) => void;
   setStatus: (status: TransferStatus) => void;
   setRole: (role: TransferRole) => void;
+  setPendingText: (text: string | null) => void;
   setError: (error: string | null) => void;
   setErrorDetails: (error: string, details?: { files?: FileInfo[]; totalSize?: number; code?: string }) => void;
   setRemotePeer: (name: string, id: string) => void;
@@ -103,9 +109,11 @@ export const useTransferStore = create<TransferState>((set) => ({
   transferCode: null,
   shareLink: null,
   transferMode: null,
+  transferKind: null,
   status: 'idle',
   role: null,
   error: null,
+  pendingText: null,
   remotePeerName: null,
   remotePeerId: null,
   errorDetails: null,
@@ -128,9 +136,13 @@ export const useTransferStore = create<TransferState>((set) => ({
 
   setTransferMode: (mode) => set({ transferMode: mode }),
 
+  setTransferKind: (kind) => set({ transferKind: kind }),
+
   setStatus: (status) => set({ status }),
 
   setRole: (role) => set({ role }),
+
+  setPendingText: (text) => set({ pendingText: text }),
 
   setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
 
@@ -172,9 +184,11 @@ export const useTransferStore = create<TransferState>((set) => ({
       transferCode: null,
       shareLink: null,
       transferMode: null,
+      transferKind: null,
       status: 'idle',
       role: null,
       error: null,
+      pendingText: null,
       errorDetails: null,
       remotePeerName: null,
       remotePeerId: null,

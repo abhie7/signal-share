@@ -4,9 +4,23 @@ import { useAppStore } from '@/lib/stores/app-store';
 import { usePeersStore } from '@/lib/stores/peers-store';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { playPeerDiscovered } from '@/lib/sounds';
+import {
+  decryptText,
+  deriveSharedAesKey,
+  exportPublicKey,
+  generateEcdhKeyPair,
+  importPublicKey,
+} from '@/lib/crypto/text-transfer';
+
+interface PendingTextKeyExchange {
+  senderId: string;
+  senderPublicKey: JsonWebKey;
+  receiverPrivateKey: CryptoKey;
+}
 
 export function useWebSocket() {
   const initialized = useRef(false);
+  const pendingTextKeys = useRef<Map<string, PendingTextKeyExchange>>(new Map());
   const setConnected = useAppStore((s) => s.setConnected);
   const setDeviceName = useAppStore((s) => s.setDeviceName);
   const setDeviceId = useAppStore((s) => s.setDeviceId);
@@ -14,6 +28,7 @@ export function useWebSocket() {
   const {
     setSession,
     setStatus,
+    setTransferKind,
     setRemotePeer,
     setTransferMode,
     setIncomingTransfer,
@@ -82,11 +97,13 @@ export function useWebSocket() {
     // Session created (sender side)
     cleanups.push(
       signaling.on('session-created', (msg) => {
+        const transferType = (msg.transferType as 'file' | 'text' | undefined) ?? 'file';
         setSession({
           sessionId: msg.sessionId as string,
           code: msg.code as string,
           shareLink: msg.shareLink as string | undefined,
         });
+        setTransferKind(transferType);
         setStatus('waiting');
         setRole('sender');
       }),
@@ -95,8 +112,10 @@ export function useWebSocket() {
     // Session joined (receiver side)
     cleanups.push(
       signaling.on('session-joined', (msg) => {
+        const transferType = (msg.transferType as 'file' | 'text' | undefined) ?? 'file';
         setStatus('connecting');
         setRole('receiver');
+        setTransferKind(transferType);
         setTransferMode(msg.transferMode as 'local' | 'remote');
         setRemotePeer(msg.senderName as string, msg.senderId as string);
         // Store sessionId so the receiver can set up WebRTC
@@ -111,6 +130,7 @@ export function useWebSocket() {
     cleanups.push(
       signaling.on('receiver-joined', (msg) => {
         setStatus('connecting');
+        setTransferKind(((msg.transferType as 'file' | 'text' | undefined) ?? 'file'));
         setRemotePeer(msg.receiverName as string, msg.receiverId as string);
         setTransferMode(msg.transferMode as 'local' | 'remote');
       }),
@@ -120,12 +140,90 @@ export function useWebSocket() {
     cleanups.push(
       signaling.on('incoming-transfer', (msg) => {
         setIncomingTransfer({
+          transferType: 'file',
           sessionId: msg.sessionId as string,
           senderId: msg.senderId as string,
           senderName: msg.senderName as string,
           files: msg.files as Array<{ name: string; size: number; type: string }>,
           totalSize: msg.totalSize as number,
         });
+      }),
+    );
+
+    cleanups.push(
+      signaling.on('text-key-request', async (msg) => {
+        try {
+          const senderId = msg.fromId as string | undefined;
+          const requestId = msg.requestId as string | undefined;
+          const senderPublicKey = msg.senderPublicKey as JsonWebKey | undefined;
+
+          if (!senderId || !requestId || !senderPublicKey) {
+            return;
+          }
+
+          const receiverKeys = await generateEcdhKeyPair();
+          const receiverPublicKey = await exportPublicKey(receiverKeys.publicKey);
+
+          pendingTextKeys.current.set(requestId, {
+            senderId,
+            senderPublicKey,
+            receiverPrivateKey: receiverKeys.privateKey,
+          });
+
+          signaling.send({
+            type: 'text-key-response',
+            targetId: senderId,
+            requestId,
+            receiverPublicKey,
+          });
+        } catch (error) {
+          console.error('Failed text key exchange request:', error);
+        }
+      }),
+      signaling.on('text-message', async (msg) => {
+        try {
+          const senderId = msg.fromId as string | undefined;
+          const requestId = msg.requestId as string | undefined;
+          const iv = msg.iv as string | undefined;
+          const ciphertext = msg.ciphertext as string | undefined;
+
+          if (!senderId || !requestId || !iv || !ciphertext) {
+            return;
+          }
+
+          const exchange = pendingTextKeys.current.get(requestId);
+          if (!exchange || exchange.senderId !== senderId) {
+            return;
+          }
+
+          const senderPublicKey = await importPublicKey(exchange.senderPublicKey);
+          const aesKey = await deriveSharedAesKey(exchange.receiverPrivateKey, senderPublicKey);
+          const textContent = await decryptText({ iv, ciphertext }, aesKey);
+
+          pendingTextKeys.current.delete(requestId);
+
+          const senderName =
+            usePeersStore
+              .getState()
+              .nearbyPeers.find((peer) => peer.id === senderId)?.name || 'Unknown';
+
+          setIncomingTransfer({
+            transferType: 'text',
+            sessionId: (msg.sessionId as string | undefined) ?? requestId,
+            senderId,
+            senderName,
+            files: [],
+            totalSize: textContent.length,
+            textContent,
+          });
+
+          const linkedSessionId = msg.sessionId as string | undefined;
+          if (linkedSessionId) {
+            setStatus('complete');
+          }
+        } catch (error) {
+          console.error('Failed to decrypt incoming text:', error);
+        }
       }),
     );
 
@@ -197,6 +295,7 @@ export function useWebSocket() {
 
     return () => {
       for (const cleanup of cleanups) cleanup();
+      pendingTextKeys.current.clear();
       signaling.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
