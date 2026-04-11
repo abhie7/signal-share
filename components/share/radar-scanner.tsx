@@ -2,7 +2,6 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCallback, useRef, useState } from 'react';
-import { useTransfer } from '@/hooks/use-transfer';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { usePeersStore } from '@/lib/stores/peers-store';
 import { processDataTransfer } from '@/lib/utils/zip';
@@ -35,17 +34,16 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
-
-      setIsProcessing(true);
       try {
-        const files = await processDataTransfer(e.dataTransfer);
+        const files = await processDataTransfer(e.dataTransfer, {
+          slowThresholdMs: 400,
+          onSlowProcessingChange: setIsProcessing,
+        });
         if (files.length > 0) {
           onFilesSelected(files);
         }
       } catch (err) {
         console.error('Error processing dropped items', err);
-      } finally {
-        setIsProcessing(false);
       }
     },
     [onFilesSelected],
@@ -65,7 +63,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
   const isIdle = status === 'idle';
 
   return (
-    <div className="relative flex items-center justify-center w-full h-full min-h-[600px]">
+    <div className="relative flex items-center justify-center w-full h-full min-h-150">
       <input
         type="file"
         multiple
@@ -93,8 +91,8 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
 
         {/* Grid Lines */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-full h-[1px] bg-primary/10" />
-          <div className="absolute h-full w-[1px] bg-primary/10" />
+          <div className="w-full h-px bg-primary/10" />
+          <div className="absolute h-full w-px bg-primary/10" />
         </div>
 
         {/* Sweep Beam effect */}
@@ -161,7 +159,10 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
                   Drop files/folders here to initiate transmission
                 </span>
                 <span className="text-muted-foreground text-xs font-mono uppercase tracking-wider">
-                  Click to select files
+                  Click to select files (you can drag n drop folders)
+                </span>
+                <span className="text-muted-foreground/80 text-[10px] font-mono uppercase tracking-wider">
+                  Tip: Copy files and press Ctrl+V anywhere on this page
                 </span>
               </motion.div>
             )}

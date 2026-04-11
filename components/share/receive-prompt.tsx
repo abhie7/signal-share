@@ -1,18 +1,45 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { formatBytes } from '@/lib/webrtc/file-chunker';
 import { DeviceAvatar } from './device-avatar';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { CheckmarkCircle02Icon, Copy01Icon } from '@hugeicons/core-free-icons';
 
 interface ReceivePromptProps {
   onAccept: (sessionId: string, senderId: string) => void;
   onDecline: (sessionId: string) => void;
+  onDismissText: () => void;
 }
 
-export function ReceivePrompt({ onAccept, onDecline }: ReceivePromptProps) {
+export function ReceivePrompt({ onAccept, onDecline, onDismissText }: ReceivePromptProps) {
   const incomingTransfer = useTransferStore((s) => s.incomingTransfer);
+  const [copied, setCopied] = useState(false);
+  const copyResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCopyText = async () => {
+    if (!incomingTransfer?.textContent) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(incomingTransfer.textContent);
+      setCopied(true);
+
+      if (copyResetTimeoutRef.current) {
+        clearTimeout(copyResetTimeoutRef.current);
+      }
+
+      copyResetTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+      }, 1800);
+    } catch (error) {
+      console.error('Failed to copy incoming text:', error);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -52,42 +79,99 @@ export function ReceivePrompt({ onAccept, onDecline }: ReceivePromptProps) {
                   </p>
                 </div>
 
-                <div className="w-full rounded-xl border border-border/20 bg-card/30 p-3 space-y-2">
-                  {incomingTransfer.files.map((file, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.1 + i * 0.05 }}
-                      className="flex items-center justify-between text-xs font-mono"
-                    >
-                      <span className="truncate text-foreground/80 pr-2">{file.name}</span>
-                      <span className="text-primary/80 shrink-0">
-                        {formatBytes(file.size)}
-                      </span>
-                    </motion.div>
-                  ))}
-
-                  <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
-                    <span>{incomingTransfer.files.length} FILE{incomingTransfer.files.length !== 1 ? 'S' : ''}</span>
-                    <span>{formatBytes(incomingTransfer.totalSize)} TOTAL</span>
+                {incomingTransfer.transferType === 'text' ? (
+                  <div className="w-full rounded-xl border border-border/20 bg-card/30 p-3 space-y-3">
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Encrypted message</p>
+                    <p className="max-h-52 overflow-auto rounded-lg border border-primary/20 bg-background/60 p-3 text-sm leading-relaxed text-foreground/90 wrap-break-word">
+                      {incomingTransfer.textContent || ''}
+                    </p>
                   </div>
-                </div>
+                ) : (
+                  <div className="w-full rounded-xl border border-border/20 bg-card/30 p-3 space-y-2">
+                    {incomingTransfer.files.map((file, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 + i * 0.05 }}
+                        className="flex items-center justify-between text-xs font-mono"
+                      >
+                        <span className="truncate text-foreground/80 pr-2">{file.name}</span>
+                        <span className="text-primary/80 shrink-0">
+                          {formatBytes(file.size)}
+                        </span>
+                      </motion.div>
+                    ))}
+
+                    <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
+                      <span>{incomingTransfer.files.length} FILE{incomingTransfer.files.length !== 1 ? 'S' : ''}</span>
+                      <span>{formatBytes(incomingTransfer.totalSize)} TOTAL</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex w-full gap-3 mt-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 font-mono uppercase tracking-widest text-xs"
-                    onClick={() => onDecline(incomingTransfer.sessionId)}
-                  >
-                    Reject
-                  </Button>
-                  <Button
-                    className="flex-1 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/50 font-mono uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(var(--primary),0.2)]"
-                    onClick={() => onAccept(incomingTransfer.sessionId, incomingTransfer.senderId)}
-                  >
-                    Accept
-                  </Button>
+                  {incomingTransfer.transferType === 'text' ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        className={`flex-1 font-mono uppercase tracking-widest text-xs transition-colors ${copied ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'border-border/40 text-muted-foreground hover:bg-muted/20'}`}
+                        onClick={handleCopyText}
+                      >
+                        <AnimatePresence mode="wait">
+                          {copied ? (
+                            <motion.span
+                              key="copied"
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.8 }}
+                              className="inline-flex items-center gap-1.5"
+                            >
+                              <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4" />
+                              Copied
+                            </motion.span>
+                          ) : (
+                            <motion.span
+                              key="copy"
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.8 }}
+                              className="inline-flex items-center gap-1.5"
+                            >
+                              <HugeiconsIcon icon={Copy01Icon} className="w-4 h-4" />
+                              Copy
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </Button>
+                      <Button
+                        className="flex-1 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/50 font-mono uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(var(--primary),0.2)]"
+                        onClick={onDismissText}
+                      >
+                        Dismiss
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 font-mono uppercase tracking-widest text-xs"
+                        onClick={() => {
+                          onDecline(incomingTransfer.sessionId);
+                        }}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        className="flex-1 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/50 font-mono uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(var(--primary),0.2)]"
+                        onClick={() => {
+                          onAccept(incomingTransfer.sessionId, incomingTransfer.senderId);
+                        }}
+                      >
+                        Accept
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

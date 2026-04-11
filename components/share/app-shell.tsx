@@ -13,6 +13,7 @@ import { DeviceAvatar } from '@/components/share/device-avatar';
 import { GlobalDropZone } from '@/components/share/global-drop-zone';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
+import GitHubButton from 'react-github-btn'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   useWebSocket();
@@ -61,9 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <HugeiconsIcon icon={LinerIcon} className="w-4 h-4 text-muted-foreground" />
                 <Link href="/docs" className="text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors">Docs</Link>
                 <HugeiconsIcon icon={LinerIcon} className="w-4 h-4 text-muted-foreground" />
-                <a href="https://github.com/abhie7/signal-share" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors">
-                  <span>GitHub</span>
-                </a>
+                  <GitHubButton href="https://github.com/abhie7/signal-share" data-color-scheme="no-preference: dark; light: light; dark: dark;" data-icon="octicon-star" data-show-count="true" aria-label="Star abhie7/signal-share on GitHub">Star</GitHubButton>
                 <HugeiconsIcon icon={LinerIcon} className="w-4 h-4 text-muted-foreground" />
               </div>
               <div className="flex items-center gap-1.5">

@@ -12,6 +12,7 @@ export default async function transferRoutes(fastify: FastifyInstance) {
     return {
       id: session.id,
       code: session.code,
+      transferType: session.transferType,
       senderName: session.senderName,
       files: session.files,
       totalSize: session.totalSize,

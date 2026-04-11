@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { formatBytes } from '@/lib/webrtc/file-chunker';
@@ -18,6 +18,7 @@ import {
   Folder01Icon as FolderIcon,
   Download04Icon as DownloadIcon
 } from '@hugeicons/core-free-icons';
+import Image from 'next/image';
 
 interface FileDropZoneProps {
   onFilesSelected: (files: File[]) => void;
@@ -30,6 +31,23 @@ export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDr
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>(initialFiles || []);
   const inputRef = useRef<HTMLInputElement>(null);
+  const syncedExternalCountRef = useRef(initialFiles?.length || 0);
+
+  useEffect(() => {
+    const externalFiles = initialFiles || [];
+    if (externalFiles.length === 0) {
+      syncedExternalCountRef.current = 0;
+      return;
+    }
+
+    if (externalFiles.length <= syncedExternalCountRef.current) {
+      return;
+    }
+
+    const newlyStaged = externalFiles.slice(syncedExternalCountRef.current);
+    syncedExternalCountRef.current = externalFiles.length;
+    setSelectedFiles((prev) => [...prev, ...newlyStaged]);
+  }, [initialFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -48,17 +66,16 @@ export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDr
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
-
-      setIsProcessing(true);
       try {
-        const files = await processDataTransfer(e.dataTransfer);
+        const files = await processDataTransfer(e.dataTransfer, {
+          slowThresholdMs: 400,
+          onSlowProcessingChange: setIsProcessing,
+        });
         if (files.length > 0) {
           setSelectedFiles((prev) => [...prev, ...files]);
         }
       } catch (err) {
         console.error('Error processing dropped items', err);
-      } finally {
-        setIsProcessing(false);
       }
     },
     [],
@@ -195,16 +212,18 @@ export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDr
                       className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 group"
                     >
                       {file.type.startsWith('image/') ? (
-                        <img
+                        <Image
                           src={URL.createObjectURL(file)}
                           alt={file.name}
-                          className="w-8 h-8 rounded-md object-cover shrink-0"
+                          width={32}
+                          height={32}
                           onLoad={(e) => {
                             // Revoke after rendering to free memory
                             // We delay slightly so the browser can paint
                             const src = (e.target as HTMLImageElement).src;
                             setTimeout(() => URL.revokeObjectURL(src), 1000);
                           }}
+                          unoptimized
                         />
                       ) : (
                         <span className="text-lg shrink-0">{getFileIcon(file.type)}</span>

@@ -19,6 +19,7 @@ export type TransferStatus =
 export interface TransferSession {
   id: string;
   code: string;
+  transferType: 'file' | 'text';
   senderId: string;
   senderName: string;
   receiverId?: string;
@@ -55,7 +56,12 @@ class SessionRegistry {
     this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
   }
 
-  create(senderId: string, senderName: string, files: FileMetadata[]): TransferSession {
+  create(
+    senderId: string,
+    senderName: string,
+    files: FileMetadata[],
+    transferType: 'file' | 'text' = 'file',
+  ): TransferSession {
     const id = nanoid(12);
     let code = generateCode();
 
@@ -69,6 +75,7 @@ class SessionRegistry {
     const session: TransferSession = {
       id,
       code,
+      transferType: transferType === 'text' ? 'text' : 'file',
       senderId,
       senderName,
       files,
