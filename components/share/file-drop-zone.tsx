@@ -215,7 +215,8 @@ export function FileDropZone({ onFilesSelected, disabled, initialFiles }: FileDr
                         <Image
                           src={URL.createObjectURL(file)}
                           alt={file.name}
-                          className="w-8 h-8 rounded-md object-cover shrink-0"
+                          width={32}
+                          height={32}
                           onLoad={(e) => {
                             // Revoke after rendering to free memory
                             // We delay slightly so the browser can paint
