@@ -25,16 +25,20 @@ export function ReceivePrompt({ onAccept, onDecline, onDismissText }: ReceivePro
       return;
     }
 
-    await navigator.clipboard.writeText(incomingTransfer.textContent);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(incomingTransfer.textContent);
+      setCopied(true);
 
-    if (copyResetTimeoutRef.current) {
-      clearTimeout(copyResetTimeoutRef.current);
+      if (copyResetTimeoutRef.current) {
+        clearTimeout(copyResetTimeoutRef.current);
+      }
+
+      copyResetTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+      }, 1800);
+    } catch (error) {
+      console.error('Failed to copy incoming text:', error);
     }
-
-    copyResetTimeoutRef.current = setTimeout(() => {
-      setCopied(false);
-    }, 1800);
   };
 
   return (
