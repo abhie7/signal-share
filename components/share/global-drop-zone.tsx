@@ -110,7 +110,6 @@ export function GlobalDropZone() {
         }
       } catch (err) {
         console.error('Error processing dropped items', err);
-        stageFilesForHomeView(files);
       }
     };
 

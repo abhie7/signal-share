@@ -123,6 +123,7 @@ function HomeView() {
         return;
       }
 
+      try {
         setTextStatus('sending');
         setTextStatusMessage(`Encrypting for ${peer.name}...`);
         await sendEncryptedText(peer.id, message);
