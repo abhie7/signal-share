@@ -1,4 +1,4 @@
-import JSZip from 'jszip';
+import type { ZipEntry } from './zip.worker';
 
 interface WebkitFileSystemEntry {
   name: string;
@@ -38,7 +38,6 @@ async function readAllDirectoryEntries(entry: WebkitFileSystemEntry): Promise<We
   const dirReader = entry.createReader();
   const allEntries: WebkitFileSystemEntry[] = [];
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const batch = await new Promise<WebkitFileSystemEntry[]>((resolve, reject) => {
       dirReader.readEntries(resolve, reject);
@@ -65,22 +64,67 @@ async function runWithConcurrency(tasks: Array<() => Promise<void>>, limit: numb
 }
 
 /**
- * Recursively reads a FileSystemEntry and adds its contents to a JSZip instance.
+ * Recursively traverses a FileSystemEntry tree and collects { path, file } pairs.
+ * Directory traversal (metadata only) stays on the main thread because the
+ * FileSystem API is not available in Web Workers.
  */
-async function addEntryToZip(entry: WebkitFileSystemEntry, zip: JSZip, path = '') {
+async function collectEntries(entry: WebkitFileSystemEntry, list: ZipEntry[], path = '') {
   if (entry.isFile) {
     const file = await new Promise<File>((resolve, reject) => {
       entry.file?.(resolve, reject);
     });
-    zip.file(path + file.name, file);
+    list.push({ path: path + file.name, file });
     await yieldToBrowser();
   } else if (entry.isDirectory) {
     const newPath = path + entry.name + '/';
-    const entries = await readAllDirectoryEntries(entry);
-    const tasks = entries.map((childEntry) => async () => addEntryToZip(childEntry, zip, newPath));
+    const children = await readAllDirectoryEntries(entry);
+    const tasks = children.map((child) => async () => collectEntries(child, list, newPath));
     await runWithConcurrency(tasks, CONCURRENCY_LIMIT);
     await yieldToBrowser();
   }
+}
+
+/**
+ * Generates a ZIP from an array of { path, file } entries.
+ *
+ * When a Web Worker is available the heavy compression is offloaded to a
+ * background thread so the main thread stays responsive for large folders.
+ * Falls back to the main thread if workers are not supported.
+ */
+async function generateZipBlob(entries: ZipEntry[]): Promise<Blob> {
+  if (typeof Worker === 'undefined') {
+    // Fallback: run on main thread (e.g. SSR or very old browsers)
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    for (const { path, file } of entries) {
+      zip.file(path, file);
+    }
+    return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  }
+
+  return new Promise<Blob>((resolve, reject) => {
+    const worker = new Worker(new URL('./zip.worker.ts', import.meta.url));
+
+    worker.onmessage = (e: MessageEvent) => {
+      const { type, blob, message } = e.data as { type: string; blob?: Blob; percent?: number; message?: string };
+      if (type === 'complete' && blob) {
+        worker.terminate();
+        resolve(blob);
+      } else if (type === 'error') {
+        worker.terminate();
+        reject(new Error(message ?? 'ZIP generation failed'));
+      }
+      // 'progress' events are intentionally ignored here; callers that need
+      // granular progress can wire up their own listener before calling this.
+    };
+
+    worker.onerror = (err) => {
+      worker.terminate();
+      reject(err);
+    };
+
+    worker.postMessage({ entries });
+  });
 }
 
 /**
@@ -93,14 +137,13 @@ export async function processDataTransfer(
   options: ProcessDataTransferOptions = {},
 ): Promise<File[]> {
   const items = Array.from(dataTransfer.items);
-  const entries = items
+  const fsEntries = items
     .map((item) => item.webkitGetAsEntry?.() as WebkitFileSystemEntry | null)
     .filter((entry): entry is WebkitFileSystemEntry => Boolean(entry));
 
   let hasDirectory = false;
 
-  // Check for directories
-  for (const entry of entries) {
+  for (const entry of fsEntries) {
     if (entry && entry.isDirectory) {
       hasDirectory = true;
       break;
@@ -108,7 +151,7 @@ export async function processDataTransfer(
   }
 
   if (!hasDirectory) {
-    // Standard file drop
+    // Standard file drop — no zipping needed
     return Array.from(dataTransfer.files);
   }
 
@@ -118,19 +161,20 @@ export async function processDataTransfer(
     onSlowProcessingChange?.(true);
   }, slowThresholdMs);
 
-  // Has directories, need to zip
-  const zip = new JSZip();
   operationCount = 0;
 
   try {
-    // Give React a chance to paint loader state before heavy folder traversal starts.
+    // Yield so React can paint the "processing" state before traversal begins.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    const tasks = entries.map((entry) => async () => addEntryToZip(entry, zip));
+    // Phase 1: traverse the directory tree on the main thread (fast — metadata only)
+    const zipEntries: ZipEntry[] = [];
+    const tasks = fsEntries.map((entry) => async () => collectEntries(entry, zipEntries));
     await runWithConcurrency(tasks, CONCURRENCY_LIMIT);
 
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const folderName = entries.length === 1 && entries[0]?.name ? entries[0].name : 'Archive';
+    // Phase 2: generate the ZIP off the main thread via a Web Worker
+    const zipBlob = await generateZipBlob(zipEntries);
+    const folderName = fsEntries.length === 1 && fsEntries[0]?.name ? fsEntries[0].name : 'Archive';
 
     const zipFile = new File([zipBlob], `${folderName}.zip`, { type: 'application/zip' });
     return [zipFile];

@@ -1,6 +1,10 @@
 import { signaling } from './signaling';
 
-const CHUNK_SIZE = 64 * 1024; // 64KB per data channel message
+const CHUNK_SIZE = 256 * 1024; // 256KB per data channel message
+// When bufferedAmount exceeds this threshold, stop sending and wait
+const BUFFER_HIGH_WATERMARK = 4 * 1024 * 1024; // 4MB
+// Resume sending once bufferedAmount drops to this level
+const BUFFER_LOW_WATERMARK = 512 * 1024; // 512KB
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -211,10 +215,30 @@ export class PeerConnectionManager {
     }
   }
 
+  /**
+   * Waits until the data channel's send buffer drains below BUFFER_LOW_WATERMARK.
+   * Uses the bufferedamountlow event instead of polling for efficient backpressure.
+   */
+  private waitForBufferToDrain(dc: RTCDataChannel): Promise<void> {
+    if (dc.bufferedAmount <= BUFFER_HIGH_WATERMARK) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      dc.bufferedAmountLowThreshold = BUFFER_LOW_WATERMARK;
+      const handler = () => {
+        dc.removeEventListener('bufferedamountlow', handler);
+        resolve();
+      };
+      dc.addEventListener('bufferedamountlow', handler);
+    });
+  }
+
   async sendFiles(files: File[]): Promise<void> {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
       throw new Error('Data channel is not open');
     }
+
+    // Configure low-watermark for backpressure events
+    this.dataChannel.bufferedAmountLowThreshold = BUFFER_LOW_WATERMARK;
 
     const totalSize = files.reduce((sum, f) => sum + f.size, 0);
     let totalBytesSent = 0;
@@ -235,15 +259,19 @@ export class PeerConnectionManager {
         }),
       );
 
-      // Send file in chunks
+      // Send file in chunks with event-driven backpressure
       let offset = 0;
       while (offset < file.size) {
+        // Wait for the send buffer to drain before adding more data.
+        // This prevents overwhelming the data channel and keeps memory usage low.
+        await this.waitForBufferToDrain(this.dataChannel);
+
         const slice = file.slice(offset, offset + CHUNK_SIZE);
         const buffer = await slice.arrayBuffer();
 
-        // Wait for buffer to drain if needed
-        while (this.dataChannel.bufferedAmount > 10 * CHUNK_SIZE) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+        // Verify channel is still open after the async read + potential wait
+        if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+          throw new Error('Data channel closed during transfer');
         }
 
         this.dataChannel.send(buffer);
