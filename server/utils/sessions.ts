@@ -8,6 +8,9 @@ export interface FileMetadata {
   type: string;
 }
 
+export type TransferType = 'file' | 'text' | 'screen';
+export type ScreenMode = 'share-self' | 'request-remote';
+
 export type TransferStatus =
   | 'waiting'
   | 'connecting'
@@ -19,7 +22,10 @@ export type TransferStatus =
 export interface TransferSession {
   id: string;
   code: string;
-  transferType: 'file' | 'text';
+  transferType: TransferType;
+  screenMode: ScreenMode | null;
+  controlEnabled: boolean;
+  autoPromptShare: boolean;
   senderId: string;
   senderName: string;
   receiverId?: string;
@@ -60,7 +66,10 @@ class SessionRegistry {
     senderId: string,
     senderName: string,
     files: FileMetadata[],
-    transferType: 'file' | 'text' = 'file',
+    transferType: TransferType = 'file',
+    screenMode: ScreenMode | null = null,
+    controlEnabled = false,
+    autoPromptShare = false,
   ): TransferSession {
     const id = nanoid(12);
     let code = generateCode();
@@ -75,7 +84,10 @@ class SessionRegistry {
     const session: TransferSession = {
       id,
       code,
-      transferType: transferType === 'text' ? 'text' : 'file',
+      transferType: transferType === 'text' || transferType === 'screen' ? transferType : 'file',
+      screenMode: transferType === 'screen' ? (screenMode ?? 'share-self') : null,
+      controlEnabled: transferType === 'screen' ? controlEnabled : false,
+      autoPromptShare: transferType === 'screen' ? autoPromptShare : false,
       senderId,
       senderName,
       files,

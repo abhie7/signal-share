@@ -6,6 +6,7 @@ import { useTransferStore } from '@/lib/stores/transfer-store';
 import { useAppStore } from '@/lib/stores/app-store';
 import { useWebRTC } from './use-webrtc';
 import { useRelay } from './use-relay';
+import { useScreenShare } from './use-screen-share';
 import { historyDB } from '@/lib/db/history';
 import {
   deriveSharedAesKey,
@@ -28,6 +29,9 @@ export function useTransfer() {
     remotePeerId,
     transferKind,
     transferMode,
+    screenMode,
+    screenPrompt,
+    controlEnabled,
     setFiles,
     setPendingText,
     setRole,
@@ -35,15 +39,23 @@ export function useTransfer() {
     setErrorDetails,
     setStatus,
     setIncomingTransfer,
+    updateTextStream,
+    setScreenPrompt,
+    setScreenStatus,
+    setScreenSharer,
+    setScreenMode,
+    setControlEnabled,
     reset,
   } = useTransferStore();
 
   const { setView } = useAppStore();
   const { startTransfer: rtcStart, receiveTransfer: rtcReceive, cleanup: rtcCleanup } = useWebRTC();
+  const { startSharing, prepareViewer, getRemoteStream, getLocalPreviewStream, cleanup: cleanupScreen } = useScreenShare();
   const { startRelayTransfer, receiveRelayTransfer, cleanupRelay } = useRelay();
 
   // Guard ref to prevent duplicate WebRTC setup from effect re-runs
   const receiverSetupDone = useRef(false);
+  const screenSetupDone = useRef(false);
 
   // Warn user before closing/refreshing during active transfer
   useEffect(() => {
@@ -116,6 +128,19 @@ export function useTransfer() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, role, remotePeerId, transferMode, sessionId, transferKind]);
 
+  useEffect(() => {
+    if (status === 'connecting' && role === 'receiver' && remotePeerId && sessionId && transferKind === 'screen') {
+      if (screenSetupDone.current) return;
+      screenSetupDone.current = true;
+      prepareViewer(remotePeerId, sessionId);
+      signaling.send({
+        type: 'screen-rtc-ready',
+        targetId: remotePeerId,
+        sessionId,
+      });
+    }
+  }, [prepareViewer, remotePeerId, role, sessionId, status, transferKind]);
+
   // ── Listen for receiver-rtc-ready (sender side) ──
   // This is the single trigger for the sender to start the WebRTC offer.
   // Uses msg.fromId (added by server relay) instead of state.remotePeerId
@@ -142,6 +167,46 @@ export function useTransfer() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const cleanup = signaling.on('screen-rtc-ready', (msg) => {
+      const sid = msg.sessionId as string;
+      const viewerId = msg.fromId as string;
+      const state = useTransferStore.getState();
+      if (
+        state.transferKind === 'screen' &&
+        state.isScreenSharer &&
+        viewerId &&
+        sid
+      ) {
+        void startSharing(viewerId, sid);
+      }
+    });
+    return cleanup;
+  }, [startSharing]);
+
+  useEffect(() => {
+    const cleanup = signaling.on('screen-share-accepted', (msg) => {
+      const state = useTransferStore.getState();
+      const sid = (msg.sessionId as string | undefined) ?? state.sessionId;
+      const sharerId = msg.fromId as string | undefined;
+      if (
+        state.transferKind === 'screen' &&
+        state.role === 'sender' &&
+        !state.isScreenSharer &&
+        sid &&
+        sharerId
+      ) {
+        prepareViewer(sharerId, sid);
+        signaling.send({
+          type: 'screen-rtc-ready',
+          targetId: sharerId,
+          sessionId: sid,
+        });
+      }
+    });
+    return cleanup;
+  }, [prepareViewer]);
+
   // ── Listen for receiver-ready (relay mode) ──
   // This is sent by the server when the receiver connects to the SSE download endpoint
   useEffect(() => {
@@ -165,16 +230,20 @@ export function useTransfer() {
     const cleanups = [
       signaling.on('transfer-cancelled', () => {
         rtcCleanup();
+        cleanupScreen();
         receiverSetupDone.current = false;
+        screenSetupDone.current = false;
       }),
       signaling.on('transfer-error', () => {
         rtcCleanup();
+        cleanupScreen();
         cleanupRelay();
         receiverSetupDone.current = false;
+        screenSetupDone.current = false;
       }),
     ];
     return () => cleanups.forEach((c) => c());
-  }, [rtcCleanup, cleanupRelay]);
+  }, [cleanupScreen, rtcCleanup, cleanupRelay]);
 
   // Share files — create session
   const shareFiles = useCallback(
@@ -237,16 +306,47 @@ export function useTransfer() {
       setRole('sender');
       setTransferKind('text');
       setView('sending');
+      const chunkSize = 48 * 1024;
+      const textChunks = Math.max(1, Math.ceil(value.length / chunkSize));
+      updateTextStream({
+        totalBytes: value.length,
+        totalChunks: textChunks,
+        bytesSent: 0,
+        chunksSent: 0,
+        assembling: false,
+      });
 
       signaling.send({
         type: 'create-session',
         transferType: 'text',
         textLength: value.length,
+        textChunks,
         files: [],
       });
     },
-    [setFiles, setPendingText, setRole, setTransferKind, setView],
+    [setFiles, setPendingText, setRole, setTransferKind, setView, updateTextStream],
   );
+
+  const shareScreen = useCallback((mode: 'share-self' | 'request-remote', enableControl: boolean) => {
+    setFiles([]);
+    setPendingText(null);
+    setRole('sender');
+    setTransferKind('screen');
+    setScreenMode(mode);
+    setControlEnabled(enableControl);
+    setScreenSharer(mode === 'share-self');
+    setScreenStatus('connecting');
+    setView('sending');
+
+    signaling.send({
+      type: 'create-session',
+      transferType: 'screen',
+      screenMode: mode,
+      controlEnabled: enableControl,
+      autoPromptShare: mode === 'request-remote',
+      files: [],
+    });
+  }, [setControlEnabled, setFiles, setPendingText, setRole, setScreenMode, setScreenSharer, setScreenStatus, setTransferKind, setView]);
 
   // Join by code
   const joinByCode = useCallback(
@@ -303,11 +403,13 @@ export function useTransfer() {
       signaling.send({ type: 'transfer-cancel', sessionId });
     }
     rtcCleanup();
+    cleanupScreen();
     cleanupRelay();
     receiverSetupDone.current = false;
+    screenSetupDone.current = false;
     reset();
     setView('home');
-  }, [sessionId, rtcCleanup, cleanupRelay, reset, setView]);
+  }, [sessionId, rtcCleanup, cleanupScreen, cleanupRelay, reset, setView]);
 
   // Force relay mode (can be called if WebRTC is stuck)
   const forceRelay = useCallback(() => {
@@ -326,16 +428,20 @@ export function useTransfer() {
   // Go back to home
   const goHome = useCallback(() => {
     rtcCleanup();
+    cleanupScreen();
     receiverSetupDone.current = false;
+    screenSetupDone.current = false;
     reset();
     setView('home');
-  }, [rtcCleanup, reset, setView]);
+  }, [rtcCleanup, cleanupScreen, reset, setView]);
 
   const sendEncryptedText = useCallback(async (targetPeerId: string, plainText: string, activeSessionId?: string) => {
     const text = plainText.trim();
     if (!text) {
       throw new Error('Text cannot be empty');
     }
+    const chunkSize = 48 * 1024;
+    const chunks = text.match(new RegExp(`.{1,${chunkSize}}`, 'gs')) ?? [''];
 
     const senderKeys = await generateEcdhKeyPair();
     const senderPublicKey = await exportPublicKey(senderKeys.publicKey);
@@ -380,21 +486,60 @@ export function useTransfer() {
 
     const receiverPublicKey = await importPublicKey(receiverPublicKeyJwk);
     const aesKey = await deriveSharedAesKey(senderKeys.privateKey, receiverPublicKey);
-    const payload = await encryptText(text, aesKey);
+    const firstPayload = await encryptText(chunks[0] ?? '', aesKey);
+
+    updateTextStream({
+      totalBytes: text.length,
+      totalChunks: chunks.length,
+      bytesSent: 0,
+      chunksSent: 0,
+      assembling: false,
+    });
 
     signaling.send({
-      type: 'text-message',
+      type: 'text-start',
       targetId: targetPeerId,
       requestId,
       sessionId: activeSessionId,
-      iv: payload.iv,
-      ciphertext: payload.ciphertext,
+      totalLength: text.length,
+      totalChunks: chunks.length,
+      iv: firstPayload.iv,
+      ciphertext: firstPayload.ciphertext,
+    });
+    updateTextStream({ bytesSent: chunks[0]?.length ?? 0, chunksSent: 1 });
+
+    for (let index = 1; index < chunks.length; index += 1) {
+      const payload = await encryptText(chunks[index], aesKey);
+      signaling.send({
+        type: 'text-chunk',
+        targetId: targetPeerId,
+        requestId,
+        sessionId: activeSessionId,
+        index,
+        iv: payload.iv,
+        ciphertext: payload.ciphertext,
+      });
+      const state = useTransferStore.getState().textStream;
+      updateTextStream({
+        bytesSent: Math.min(text.length, state.bytesSent + chunks[index].length),
+        chunksSent: index + 1,
+      });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 0);
+      });
+    }
+
+    signaling.send({
+      type: 'text-end',
+      targetId: targetPeerId,
+      requestId,
+      sessionId: activeSessionId,
     });
 
     if (activeSessionId) {
       signaling.send({ type: 'transfer-complete', sessionId: activeSessionId });
     }
-  }, []);
+  }, [updateTextStream]);
 
   const textSessionSentRef = useRef<string | null>(null);
 
@@ -437,6 +582,51 @@ export function useTransfer() {
     setIncomingTransfer(null);
   }, [setIncomingTransfer]);
 
+  const acceptScreenPrompt = useCallback(async () => {
+    const state = useTransferStore.getState();
+    if (!state.screenPrompt.sessionId || !state.screenPrompt.requesterId) return;
+
+    setScreenPrompt({
+      visible: false,
+      requesterId: null,
+      requesterName: null,
+      sessionId: null,
+    });
+    setRole('receiver');
+    setTransferKind('screen');
+    setScreenSharer(true);
+    setScreenStatus('connecting');
+    setView('receiving');
+
+    try {
+      signaling.send({
+        type: 'screen-share-accept',
+        targetId: state.screenPrompt.requesterId,
+        sessionId: state.screenPrompt.sessionId,
+      });
+    } catch (error) {
+      setErrorDetails(error instanceof Error ? error.message : 'Failed to start screen sharing', { code: 'SCREEN_START_FAILED' });
+    }
+  }, [setErrorDetails, setRole, setScreenPrompt, setScreenSharer, setScreenStatus, setTransferKind, setView]);
+
+  const declineScreenPrompt = useCallback(() => {
+    const state = useTransferStore.getState();
+    if (state.screenPrompt.sessionId && state.screenPrompt.requesterId) {
+      signaling.send({
+        type: 'screen-share-decline',
+        targetId: state.screenPrompt.requesterId,
+        sessionId: state.screenPrompt.sessionId,
+      });
+    }
+    setScreenPrompt({
+      visible: false,
+      requesterId: null,
+      requesterName: null,
+      sessionId: null,
+    });
+    setScreenStatus('declined');
+  }, [setScreenPrompt, setScreenStatus]);
+
   return {
     files,
     fileInfos,
@@ -446,8 +636,12 @@ export function useTransfer() {
     status,
     role,
     transferMode,
+    screenMode,
+    screenPrompt,
+    controlEnabled,
     shareFiles,
     shareText,
+    shareScreen,
     sendToPeer,
     joinByCode,
     joinByLink,
@@ -458,5 +652,9 @@ export function useTransfer() {
     forceRelay,
     sendEncryptedText,
     dismissIncomingTransfer,
+    acceptScreenPrompt,
+    declineScreenPrompt,
+    getRemoteStream,
+    getLocalPreviewStream,
   };
 }

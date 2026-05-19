@@ -10,6 +10,9 @@ export type TransferStatus =
   | 'cancelled';
 
 export type TransferRole = 'sender' | 'receiver' | null;
+export type TransferKind = 'file' | 'text' | 'screen' | null;
+export type ScreenMode = 'share-self' | 'request-remote';
+export type ScreenStatus = 'idle' | 'prompting' | 'connecting' | 'live' | 'ended' | 'declined' | 'error';
 
 export interface FileInfo {
   name: string;
@@ -27,14 +30,27 @@ export interface TransferProgress {
   totalFiles: number;
 }
 
+export interface TextStreamProgress {
+  bytesSent: number;
+  bytesReceived: number;
+  totalBytes: number;
+  chunksSent: number;
+  chunksReceived: number;
+  totalChunks: number;
+  assembling: boolean;
+}
+
 export interface IncomingTransfer {
-  transferType: 'file' | 'text';
+  transferType: 'file' | 'text' | 'screen';
   sessionId: string;
   senderId: string;
   senderName: string;
   files: FileInfo[];
   totalSize: number;
   textContent?: string;
+  screenMode?: ScreenMode | null;
+  controlEnabled?: boolean;
+  autoPromptShare?: boolean;
 }
 
 export interface ErrorDetails {
@@ -53,7 +69,19 @@ interface TransferState {
   transferCode: string | null;
   shareLink: string | null;
   transferMode: 'local' | 'remote' | null;
-  transferKind: 'file' | 'text' | null;
+  transferKind: TransferKind;
+  screenMode: ScreenMode | null;
+  screenStatus: ScreenStatus;
+  screenRenderNonce: number;
+  isScreenSharer: boolean;
+  controlEnabled: boolean;
+  remoteWantsControl: boolean;
+  screenPrompt: {
+    visible: boolean;
+    requesterId: string | null;
+    requesterName: string | null;
+    sessionId: string | null;
+  };
   status: TransferStatus;
   role: TransferRole;
   error: string | null;
@@ -68,6 +96,7 @@ interface TransferState {
 
   // Progress
   progress: TransferProgress;
+  textStream: TextStreamProgress;
 
   // Incoming transfer prompt
   incomingTransfer: IncomingTransfer | null;
@@ -79,7 +108,14 @@ interface TransferState {
   setFiles: (files: File[]) => void;
   setSession: (data: { sessionId: string; code: string; shareLink?: string }) => void;
   setTransferMode: (mode: 'local' | 'remote') => void;
-  setTransferKind: (kind: 'file' | 'text' | null) => void;
+  setTransferKind: (kind: TransferKind) => void;
+  setScreenMode: (mode: ScreenMode | null) => void;
+  setScreenStatus: (status: ScreenStatus) => void;
+  bumpScreenRenderNonce: () => void;
+  setScreenSharer: (isSharer: boolean) => void;
+  setControlEnabled: (enabled: boolean) => void;
+  setRemoteWantsControl: (value: boolean) => void;
+  setScreenPrompt: (data: TransferState['screenPrompt']) => void;
   setStatus: (status: TransferStatus) => void;
   setRole: (role: TransferRole) => void;
   setPendingText: (text: string | null) => void;
@@ -87,6 +123,7 @@ interface TransferState {
   setErrorDetails: (error: string, details?: { files?: FileInfo[]; totalSize?: number; code?: string }) => void;
   setRemotePeer: (name: string, id: string) => void;
   updateProgress: (progress: Partial<TransferProgress>) => void;
+  updateTextStream: (progress: Partial<TextStreamProgress>) => void;
   setIncomingTransfer: (transfer: IncomingTransfer | null) => void;
   setFileInfos: (fileInfos: FileInfo[]) => void;
   addReceivedFile: (file: { blob: Blob; name: string; type: string }) => void;
@@ -103,6 +140,16 @@ const initialProgress: TransferProgress = {
   totalFiles: 0,
 };
 
+const initialTextStream: TextStreamProgress = {
+  bytesSent: 0,
+  bytesReceived: 0,
+  totalBytes: 0,
+  chunksSent: 0,
+  chunksReceived: 0,
+  totalChunks: 0,
+  assembling: false,
+};
+
 export const useTransferStore = create<TransferState>((set) => ({
   files: [],
   fileInfos: [],
@@ -111,6 +158,18 @@ export const useTransferStore = create<TransferState>((set) => ({
   shareLink: null,
   transferMode: null,
   transferKind: null,
+  screenMode: null,
+  screenStatus: 'idle',
+  screenRenderNonce: 0,
+  isScreenSharer: false,
+  controlEnabled: false,
+  remoteWantsControl: false,
+  screenPrompt: {
+    visible: false,
+    requesterId: null,
+    requesterName: null,
+    sessionId: null,
+  },
   status: 'idle',
   role: null,
   error: null,
@@ -119,6 +178,7 @@ export const useTransferStore = create<TransferState>((set) => ({
   remotePeerId: null,
   errorDetails: null,
   progress: { ...initialProgress },
+  textStream: { ...initialTextStream },
   incomingTransfer: null,
   receivedFiles: [],
 
@@ -138,6 +198,13 @@ export const useTransferStore = create<TransferState>((set) => ({
   setTransferMode: (mode) => set({ transferMode: mode }),
 
   setTransferKind: (kind) => set({ transferKind: kind }),
+  setScreenMode: (mode) => set({ screenMode: mode }),
+  setScreenStatus: (screenStatus) => set({ screenStatus }),
+  bumpScreenRenderNonce: () => set((state) => ({ screenRenderNonce: state.screenRenderNonce + 1 })),
+  setScreenSharer: (isScreenSharer) => set({ isScreenSharer }),
+  setControlEnabled: (controlEnabled) => set({ controlEnabled }),
+  setRemoteWantsControl: (remoteWantsControl) => set({ remoteWantsControl }),
+  setScreenPrompt: (screenPrompt) => set({ screenPrompt }),
 
   setStatus: (status) => set({ status }),
 
@@ -170,6 +237,11 @@ export const useTransferStore = create<TransferState>((set) => ({
       progress: { ...state.progress, ...progress },
     })),
 
+  updateTextStream: (progress) =>
+    set((state) => ({
+      textStream: { ...state.textStream, ...progress },
+    })),
+
   setIncomingTransfer: (transfer) => set({ incomingTransfer: transfer }),
 
   setFileInfos: (fileInfos) => set({ fileInfos }),
@@ -188,6 +260,18 @@ export const useTransferStore = create<TransferState>((set) => ({
       shareLink: null,
       transferMode: null,
       transferKind: null,
+      screenMode: null,
+      screenStatus: 'idle',
+      screenRenderNonce: 0,
+      isScreenSharer: false,
+      controlEnabled: false,
+      remoteWantsControl: false,
+      screenPrompt: {
+        visible: false,
+        requesterId: null,
+        requesterName: null,
+        sessionId: null,
+      },
       status: 'idle',
       role: null,
       error: null,
@@ -196,6 +280,7 @@ export const useTransferStore = create<TransferState>((set) => ({
       remotePeerName: null,
       remotePeerId: null,
       progress: { ...initialProgress },
+      textStream: { ...initialTextStream },
       incomingTransfer: null,
       receivedFiles: [],
     }),

@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 import { networkInterfaces } from 'os';
 import { generateName } from '../utils/names.js';
 import { peerRegistry } from '../utils/peers.js';
-import { sessionRegistry } from '../utils/sessions.js';
+import { sessionRegistry, type ScreenMode, type TransferType } from '../utils/sessions.js';
 import { extractSubnet, getClientIP, isPrivateIP } from '../utils/network.js';
 
 function getLanAddress(port: number): string {
@@ -155,9 +155,14 @@ export default async function wsRoutes(fastify: FastifyInstance) {
 }
 
 function handleCreateSession(socket: WebSocket, peerId: string, msg: WsMessage): void {
-  const transferType = (msg.transferType as 'file' | 'text' | undefined) ?? 'file';
+  const transferType = (msg.transferType as TransferType | undefined) ?? 'file';
+  const screenMode = (msg.screenMode as ScreenMode | undefined) ?? 'share-self';
+  const controlEnabled = msg.controlEnabled === true;
+  const autoPromptShare = msg.autoPromptShare === true;
   const rawTextLength = msg.textLength;
+  const rawTextChunks = msg.textChunks;
   const textLength = typeof rawTextLength === 'number' ? rawTextLength : undefined;
+  const textChunks = typeof rawTextChunks === 'number' ? rawTextChunks : undefined;
   const files = msg.files as Array<{ name: string; size: number; type: string }>;
   if (transferType === 'file' && (!files || !Array.isArray(files) || files.length === 0)) {
     safeSend(socket, { type: 'error', message: 'No files provided' });
@@ -166,6 +171,10 @@ function handleCreateSession(socket: WebSocket, peerId: string, msg: WsMessage):
 
   if (transferType === 'text' && (!textLength || textLength <= 0)) {
     safeSend(socket, { type: 'error', message: 'No text provided' });
+    return;
+  }
+  if (transferType === 'screen' && screenMode !== 'share-self' && screenMode !== 'request-remote') {
+    safeSend(socket, { type: 'error', message: 'Invalid screen mode' });
     return;
   }
 
@@ -177,10 +186,27 @@ function handleCreateSession(socket: WebSocket, peerId: string, msg: WsMessage):
             name: 'Encrypted Text Snippet',
             size: textLength ?? 0,
             type: 'text/plain',
+            chunks: textChunks ?? 0,
           },
         ]
+      : transferType === 'screen'
+        ? [
+            {
+              name: 'Live Screen Stream',
+              size: 0,
+              type: 'video/live',
+            },
+          ]
       : files;
-  const session = sessionRegistry.create(peerId, peer?.name || 'Unknown', sessionFiles, transferType);
+  const session = sessionRegistry.create(
+    peerId,
+    peer?.name || 'Unknown',
+    sessionFiles,
+    transferType,
+    transferType === 'screen' ? screenMode : null,
+    controlEnabled,
+    autoPromptShare,
+  );
   session.senderWs = socket;
   const host = process.env.HOST || "";
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
@@ -189,6 +215,9 @@ function handleCreateSession(socket: WebSocket, peerId: string, msg: WsMessage):
     sessionId: session.id,
     code: session.code,
     transferType: session.transferType,
+    screenMode: session.screenMode,
+    controlEnabled: session.controlEnabled,
+    autoPromptShare: session.autoPromptShare,
     shareLink: `${protocol}://${host}/receive/${session.id}`,
   });
 }
@@ -223,6 +252,9 @@ function handleJoinByCode(socket: WebSocket, peerId: string, subnet: string, msg
     files: session.files,
     totalSize: session.totalSize,
     transferMode: joined.transferMode,
+    screenMode: session.screenMode,
+    controlEnabled: session.controlEnabled,
+    autoPromptShare: session.autoPromptShare,
   });
   if (session.senderWs) {
     safeSend(session.senderWs, {
@@ -232,6 +264,9 @@ function handleJoinByCode(socket: WebSocket, peerId: string, subnet: string, msg
       receiverId: peerId,
       receiverName: peer?.name || 'Unknown',
       transferMode: joined.transferMode,
+      screenMode: session.screenMode,
+      controlEnabled: session.controlEnabled,
+      autoPromptShare: session.autoPromptShare,
     });
   }
 }
@@ -266,6 +301,9 @@ function handleJoinByLink(socket: WebSocket, peerId: string, subnet: string, msg
     files: session.files,
     totalSize: session.totalSize,
     transferMode: joined.transferMode,
+    screenMode: session.screenMode,
+    controlEnabled: session.controlEnabled,
+    autoPromptShare: session.autoPromptShare,
   });
   if (session.senderWs) {
     safeSend(session.senderWs, {
@@ -275,6 +313,9 @@ function handleJoinByLink(socket: WebSocket, peerId: string, subnet: string, msg
       receiverId: peerId,
       receiverName: peer?.name || 'Unknown',
       transferMode: joined.transferMode,
+      screenMode: session.screenMode,
+      controlEnabled: session.controlEnabled,
+      autoPromptShare: session.autoPromptShare,
     });
   }
 }
@@ -442,6 +483,87 @@ function handleTransferError(peerId: string, msg: WsMessage): void {
   }
 }
 
+function handleScreenShareRequest(peerId: string, msg: WsMessage): void {
+  const sessionId = msg.sessionId as string;
+  const session = sessionRegistry.getById(sessionId);
+  if (!session || session.transferType !== 'screen') return;
+  const targetId = msg.targetId as string;
+  const targetPeer = peerRegistry.get(targetId);
+  const sender = peerRegistry.get(peerId);
+  if (!targetPeer || !sender) return;
+  safeSend(targetPeer.ws, {
+    type: 'screen-share-requested',
+    sessionId,
+    senderId: peerId,
+    senderName: sender.name,
+    screenMode: session.screenMode,
+    controlEnabled: session.controlEnabled,
+  });
+}
+
+function handleScreenSharePrompt(peerId: string, msg: WsMessage): void {
+  const sessionId = msg.sessionId as string;
+  const session = sessionRegistry.getById(sessionId);
+  if (!session || session.transferType !== 'screen') return;
+  const targetId = msg.targetId as string;
+  const targetPeer = peerRegistry.get(targetId);
+  if (!targetPeer) return;
+  safeSend(targetPeer.ws, {
+    type: 'screen-share-prompt',
+    sessionId,
+    fromId: peerId,
+    fromName: peerRegistry.get(peerId)?.name ?? 'Unknown',
+    autoPromptShare: session.autoPromptShare,
+    screenMode: session.screenMode,
+    controlEnabled: session.controlEnabled,
+  });
+}
+
+function handleScreenShareAccepted(peerId: string, msg: WsMessage): void {
+  const sessionId = msg.sessionId as string;
+  const session = sessionRegistry.getById(sessionId);
+  if (!session || session.transferType !== 'screen') return;
+  const targetId = msg.targetId as string;
+  const targetPeer = peerRegistry.get(targetId);
+  if (!targetPeer) return;
+  safeSend(targetPeer.ws, {
+    type: 'screen-share-accepted',
+    sessionId,
+    fromId: peerId,
+    fromName: peerRegistry.get(peerId)?.name ?? 'Unknown',
+  });
+}
+
+function handleScreenShareDeclined(peerId: string, msg: WsMessage): void {
+  const sessionId = msg.sessionId as string;
+  const session = sessionRegistry.getById(sessionId);
+  if (!session || session.transferType !== 'screen') return;
+  const targetId = msg.targetId as string;
+  const targetPeer = peerRegistry.get(targetId);
+  if (!targetPeer) return;
+  safeSend(targetPeer.ws, {
+    type: 'screen-share-declined',
+    sessionId,
+    fromId: peerId,
+    fromName: peerRegistry.get(peerId)?.name ?? 'Unknown',
+  });
+}
+
+function handleScreenControlInput(peerId: string, msg: WsMessage): void {
+  const sessionId = msg.sessionId as string;
+  const session = sessionRegistry.getById(sessionId);
+  if (!session || session.transferType !== 'screen' || !session.controlEnabled) return;
+  const targetId = msg.targetId as string;
+  const targetPeer = peerRegistry.get(targetId);
+  if (!targetPeer) return;
+  safeSend(targetPeer.ws, {
+    type: 'screen-control-input',
+    sessionId,
+    fromId: peerId,
+    payload: msg.payload,
+  });
+}
+
 type MessageHandler = (socket: WebSocket, peerId: string, subnet: string, msg: WsMessage) => void;
 
 const messageHandlers: Record<string, MessageHandler> = {
@@ -455,6 +577,9 @@ const messageHandlers: Record<string, MessageHandler> = {
   'text-key-request': (_, peerId, __, msg) => handleRtcMessage(peerId, msg),
   'text-key-response': (_, peerId, __, msg) => handleRtcMessage(peerId, msg),
   'text-message': (_, peerId, __, msg) => handleRtcMessage(peerId, msg),
+  'text-start': (_, peerId, __, msg) => handleRtcMessage(peerId, msg),
+  'text-chunk': (_, peerId, __, msg) => handleRtcMessage(peerId, msg),
+  'text-end': (_, peerId, __, msg) => handleRtcMessage(peerId, msg),
   'file-chunk': (_, peerId, __, msg) => handleFileChunk(peerId, msg),
   'file-chunk-end': (_, __, ___, msg) => handleFileChunkEnd(msg),
   'transfer-progress': (_, peerId, __, msg) => handleTransferProgress(peerId, msg),
@@ -465,6 +590,12 @@ const messageHandlers: Record<string, MessageHandler> = {
   'decline-transfer': (_, __, ___, msg) => handleDeclineTransfer(msg),
   'update-identity': (_, peerId, subnet, msg) => handleUpdateIdentity(peerId, subnet, msg),
   'transfer-error': (_, peerId, __, msg) => handleTransferError(peerId, msg),
+  'screen-share-request': (_, peerId, __, msg) => handleScreenShareRequest(peerId, msg),
+  'screen-share-prompt': (_, peerId, __, msg) => handleScreenSharePrompt(peerId, msg),
+  'screen-share-accept': (_, peerId, __, msg) => handleScreenShareAccepted(peerId, msg),
+  'screen-share-decline': (_, peerId, __, msg) => handleScreenShareDeclined(peerId, msg),
+  'screen-control-input': (_, peerId, __, msg) => handleScreenControlInput(peerId, msg),
+  'screen-rtc-ready': (_, peerId, __, msg) => handleRtcMessage(peerId, msg),
 };
 
 function handleMessage(
