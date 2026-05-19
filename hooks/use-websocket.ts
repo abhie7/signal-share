@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { signaling } from '@/lib/webrtc/signaling';
 import { useAppStore } from '@/lib/stores/app-store';
 import { usePeersStore } from '@/lib/stores/peers-store';
-import { useTransferStore } from '@/lib/stores/transfer-store';
+import { useTransferStore, type ScreenMode } from '@/lib/stores/transfer-store';
 import { playPeerDiscovered } from '@/lib/sounds';
 import {
   decryptText,
@@ -18,9 +18,20 @@ interface PendingTextKeyExchange {
   receiverPrivateKey: CryptoKey;
 }
 
+interface IncomingTextStream {
+  senderId: string;
+  senderName: string;
+  sessionId: string;
+  totalChunks: number;
+  totalLength: number;
+  chunks: string[];
+  receivedCount: number;
+}
+
 export function useWebSocket() {
   const initialized = useRef(false);
   const pendingTextKeys = useRef<Map<string, PendingTextKeyExchange>>(new Map());
+  const incomingTextStreams = useRef<Map<string, IncomingTextStream>>(new Map());
   const setConnected = useAppStore((s) => s.setConnected);
   const setDeviceName = useAppStore((s) => s.setDeviceName);
   const setDeviceId = useAppStore((s) => s.setDeviceId);
@@ -35,6 +46,13 @@ export function useWebSocket() {
     setFileInfos,
     updateProgress,
     setRole,
+    updateTextStream,
+    setScreenMode,
+    setScreenSharer,
+    setControlEnabled,
+    setRemoteWantsControl,
+    setScreenPrompt,
+    setScreenStatus,
   } = useTransferStore();
 
   useEffect(() => {
@@ -98,13 +116,18 @@ export function useWebSocket() {
     // Session created (sender side)
     cleanups.push(
       signaling.on('session-created', (msg) => {
-        const transferType = (msg.transferType as 'file' | 'text' | undefined) ?? 'file';
+        const transferType = (msg.transferType as 'file' | 'text' | 'screen' | undefined) ?? 'file';
         setSession({
           sessionId: msg.sessionId as string,
           code: msg.code as string,
           shareLink: msg.shareLink as string | undefined,
         });
         setTransferKind(transferType);
+        setScreenMode((msg.screenMode as ScreenMode | undefined) ?? null);
+        if (transferType === 'screen') {
+          setScreenSharer(((msg.screenMode as ScreenMode | undefined) ?? 'share-self') === 'share-self');
+        }
+        setControlEnabled(msg.controlEnabled === true);
         setStatus('waiting');
         setRole('sender');
       }),
@@ -113,12 +136,17 @@ export function useWebSocket() {
     // Session joined (receiver side)
     cleanups.push(
       signaling.on('session-joined', (msg) => {
-        const transferType = (msg.transferType as 'file' | 'text' | undefined) ?? 'file';
+        const transferType = (msg.transferType as 'file' | 'text' | 'screen' | undefined) ?? 'file';
         const incomingFiles = msg.files as Array<{ name: string; size: number; type: string }>;
 
         setStatus('connecting');
         setRole('receiver');
         setTransferKind(transferType);
+        setScreenMode((msg.screenMode as ScreenMode | undefined) ?? null);
+        if (transferType === 'screen') {
+          setScreenSharer(((msg.screenMode as ScreenMode | undefined) ?? 'share-self') === 'request-remote');
+        }
+        setControlEnabled(msg.controlEnabled === true);
         setTransferMode(msg.transferMode as 'local' | 'remote');
         setRemotePeer(msg.senderName as string, msg.senderId as string);
         setFileInfos(incomingFiles || []);
@@ -127,6 +155,18 @@ export function useWebSocket() {
           sessionId: msg.sessionId as string,
           code: '',
         });
+        if (transferType === 'screen') {
+          setScreenStatus('connecting');
+          if ((msg.screenMode as ScreenMode | undefined) === 'request-remote') {
+            setScreenPrompt({
+              visible: true,
+              requesterId: msg.senderId as string,
+              requesterName: msg.senderName as string,
+              sessionId: msg.sessionId as string,
+            });
+            setScreenStatus('prompting');
+          }
+        }
       }),
     );
 
@@ -134,7 +174,12 @@ export function useWebSocket() {
     cleanups.push(
       signaling.on('receiver-joined', (msg) => {
         setStatus('connecting');
-        setTransferKind(((msg.transferType as 'file' | 'text' | undefined) ?? 'file'));
+        setTransferKind(((msg.transferType as 'file' | 'text' | 'screen' | undefined) ?? 'file'));
+        setScreenMode((msg.screenMode as ScreenMode | undefined) ?? null);
+        if (((msg.transferType as 'file' | 'text' | 'screen' | undefined) ?? 'file') === 'screen') {
+          setScreenSharer(((msg.screenMode as ScreenMode | undefined) ?? 'share-self') === 'share-self');
+        }
+        setControlEnabled(msg.controlEnabled === true);
         setRemotePeer(msg.receiverName as string, msg.receiverId as string);
         setTransferMode(msg.transferMode as 'local' | 'remote');
       }),
@@ -231,6 +276,164 @@ export function useWebSocket() {
           console.error('Failed to decrypt incoming text:', error);
         }
       }),
+      signaling.on('text-start', async (msg) => {
+        try {
+          const senderId = msg.fromId as string | undefined;
+          const requestId = msg.requestId as string | undefined;
+          const sessionId = (msg.sessionId as string | undefined) ?? requestId;
+          const totalChunks = msg.totalChunks as number | undefined;
+          const totalLength = msg.totalLength as number | undefined;
+          const iv = msg.iv as string | undefined;
+          const ciphertext = msg.ciphertext as string | undefined;
+          if (
+            !senderId ||
+            !requestId ||
+            !sessionId ||
+            typeof totalChunks !== 'number' ||
+            typeof totalLength !== 'number' ||
+            !iv ||
+            !ciphertext
+          ) {
+            return;
+          }
+
+          const exchange = pendingTextKeys.current.get(requestId);
+          if (!exchange || exchange.senderId !== senderId) {
+            return;
+          }
+
+          const senderPublicKey = await importPublicKey(exchange.senderPublicKey);
+          const aesKey = await deriveSharedAesKey(exchange.receiverPrivateKey, senderPublicKey);
+          const metaChunk = await decryptText({ iv, ciphertext }, aesKey);
+          const senderName = usePeersStore.getState().nearbyPeers.find((peer) => peer.id === senderId)?.name || 'Unknown';
+          const stream: IncomingTextStream = {
+            senderId,
+            senderName,
+            sessionId,
+            totalChunks,
+            totalLength,
+            chunks: new Array(totalChunks),
+            receivedCount: 0,
+          };
+
+          stream.chunks[0] = metaChunk;
+          stream.receivedCount = 1;
+          incomingTextStreams.current.set(requestId, stream);
+          updateTextStream({
+            totalBytes: totalLength,
+            bytesReceived: metaChunk.length,
+            totalChunks,
+            chunksReceived: 1,
+            assembling: true,
+          });
+          setStatus('transferring');
+        } catch (error) {
+          console.error('Failed to handle text-start:', error);
+        }
+      }),
+      signaling.on('text-chunk', async (msg) => {
+        try {
+          const senderId = msg.fromId as string | undefined;
+          const requestId = msg.requestId as string | undefined;
+          const index = msg.index as number | undefined;
+          const iv = msg.iv as string | undefined;
+          const ciphertext = msg.ciphertext as string | undefined;
+          if (!senderId || !requestId || typeof index !== 'number' || !iv || !ciphertext) {
+            return;
+          }
+
+          const exchange = pendingTextKeys.current.get(requestId);
+          const stream = incomingTextStreams.current.get(requestId);
+          if (!exchange || !stream || exchange.senderId !== senderId) {
+            return;
+          }
+
+          const senderPublicKey = await importPublicKey(exchange.senderPublicKey);
+          const aesKey = await deriveSharedAesKey(exchange.receiverPrivateKey, senderPublicKey);
+          const decodedChunk = await decryptText({ iv, ciphertext }, aesKey);
+
+          if (!stream.chunks[index]) {
+            stream.receivedCount += 1;
+          }
+          stream.chunks[index] = decodedChunk;
+          incomingTextStreams.current.set(requestId, stream);
+          const bytesReceived = stream.chunks.reduce((sum, chunk) => sum + (chunk?.length || 0), 0);
+          updateTextStream({
+            bytesReceived,
+            chunksReceived: stream.receivedCount,
+            assembling: true,
+          });
+        } catch (error) {
+          console.error('Failed to handle text-chunk:', error);
+        }
+      }),
+      signaling.on('text-end', async (msg) => {
+        try {
+          const senderId = msg.fromId as string | undefined;
+          const requestId = msg.requestId as string | undefined;
+          if (!senderId || !requestId) {
+            return;
+          }
+
+          const stream = incomingTextStreams.current.get(requestId);
+          const exchange = pendingTextKeys.current.get(requestId);
+          if (!stream || !exchange || exchange.senderId !== senderId) {
+            return;
+          }
+
+          if (stream.chunks.some((chunk) => typeof chunk !== 'string')) {
+            return;
+          }
+
+          const textContent = stream.chunks.join('');
+          setIncomingTransfer({
+            transferType: 'text',
+            sessionId: stream.sessionId,
+            senderId: stream.senderId,
+            senderName: stream.senderName,
+            files: [],
+            totalSize: textContent.length,
+            textContent,
+          });
+
+          incomingTextStreams.current.delete(requestId);
+          pendingTextKeys.current.delete(requestId);
+          updateTextStream({
+            assembling: false,
+            bytesReceived: textContent.length,
+            chunksReceived: stream.totalChunks,
+          });
+          setStatus('complete');
+        } catch (error) {
+          console.error('Failed to handle text-end:', error);
+        }
+      }),
+      signaling.on('screen-share-prompt', (msg) => {
+        setScreenPrompt({
+          visible: true,
+          requesterId: (msg.fromId as string | undefined) ?? null,
+          requesterName: (msg.fromName as string | undefined) ?? 'Unknown',
+          sessionId: (msg.sessionId as string | undefined) ?? null,
+        });
+        setScreenMode(((msg.screenMode as ScreenMode | undefined) ?? 'request-remote'));
+        setControlEnabled(msg.controlEnabled === true);
+        setScreenStatus('prompting');
+      }),
+      signaling.on('screen-share-declined', () => {
+        setScreenStatus('declined');
+      }),
+      signaling.on('screen-share-accepted', () => {
+        setScreenStatus('connecting');
+      }),
+      signaling.on('screen-control-input', (msg) => {
+        const payload = msg.payload as { type?: string } | undefined;
+        if (payload?.type === 'request-control') {
+          setRemoteWantsControl(true);
+        }
+        if (payload?.type === 'release-control') {
+          setRemoteWantsControl(false);
+        }
+      }),
     );
 
     // Transfer accepted (sender gets notification to start WebRTC)
@@ -299,9 +502,12 @@ export function useWebSocket() {
       }),
     );
 
+    const pendingKeysRef = pendingTextKeys;
+    const incomingStreamsRef = incomingTextStreams;
     return () => {
       for (const cleanup of cleanups) cleanup();
-      pendingTextKeys.current.clear();
+      pendingKeysRef.current.clear();
+      incomingStreamsRef.current.clear();
       signaling.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

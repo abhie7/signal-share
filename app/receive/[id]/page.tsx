@@ -17,7 +17,10 @@ import { Alert01Icon, SecurityLockIcon } from '@hugeicons/core-free-icons';
 interface SessionInfo {
   id: string;
   code: string;
-  transferType: 'file' | 'text';
+  transferType: 'file' | 'text' | 'screen';
+  screenMode?: 'share-self' | 'request-remote' | null;
+  controlEnabled?: boolean;
+  autoPromptShare?: boolean;
   senderName: string;
   files: Array<{ name: string; size: number; type: string }>;
   totalSize: number;
@@ -32,8 +35,9 @@ export default function ReceivePage() {
   const [error, setError] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
 
-  const { joinByLink } = useTransfer();
+  const { joinByLink, acceptScreenPrompt, declineScreenPrompt } = useTransfer();
   const status = useTransferStore((s) => s.status);
+  const screenPrompt = useTransferStore((s) => s.screenPrompt);
   const isConnected = useAppStore((s) => s.isConnected);
 
   // Fetch session info
@@ -137,6 +141,14 @@ export default function ReceivePage() {
                       <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
                         <span>TEXT PAYLOAD</span>
                         <span>{sessionInfo.totalSize} CHARS</span>
+                      </div>
+                    </>
+                  ) : sessionInfo.transferType === 'screen' ? (
+                    <>
+                      <p className="text-xs font-mono text-foreground/80">Live screen session</p>
+                      <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
+                        <span>{sessionInfo.screenMode === 'request-remote' ? 'YOU WILL SHARE SCREEN' : 'YOU WILL VIEW SCREEN'}</span>
+                        <span>{sessionInfo.controlEnabled ? 'CONTROL TEST ON' : 'VIEW ONLY'}</span>
                       </div>
                     </>
                   ) : (
@@ -267,6 +279,24 @@ export default function ReceivePage() {
           )}
         </motion.div>
       </div>
+      {screenPrompt.visible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-primary/30 bg-background/90 p-6 text-center backdrop-blur-xl">
+            <h3 className="text-lg font-bold uppercase tracking-widest text-foreground/90">Screen Share Request</h3>
+            <p className="mt-2 text-xs font-mono uppercase tracking-wider text-muted-foreground">
+              {screenPrompt.requesterName || 'A device'} asked you to share your screen.
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <Button variant="outline" className="font-mono uppercase tracking-widest text-xs" onClick={declineScreenPrompt}>
+                Decline
+              </Button>
+              <Button className="font-mono uppercase tracking-widest text-xs" onClick={() => void acceptScreenPrompt()}>
+                Start Sharing
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

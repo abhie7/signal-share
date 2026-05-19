@@ -12,7 +12,7 @@ export function NearbyPeers({ onPeerClick }: NearbyPeersProps) {
   const nearbyPeers = usePeersStore((s) => s.nearbyPeers);
 
   return (
-    <div className="flex flex-col h-full rounded-2xl border border-border/20 bg-background/20 backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,0.5)] overflow-hidden">
+    <div className="flex flex-col h-full rounded-2xl border border-border/20 bg-background/20 backdrop-blur-xl shadow-[0_0_10px_rgba(0,0,0,0.1)] overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border/10 bg-background/40">
         <h3 className="text-xs font-bold tracking-widest uppercase text-foreground/90">Active Nodes</h3>
         <div className="flex items-center gap-2">

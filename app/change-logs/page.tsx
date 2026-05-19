@@ -8,6 +8,36 @@ export const metadata = {
 
 const changelogs = [
   {
+    date: 'May 19, 2026',
+    version: '1.2.3',
+    changes: [
+      {
+        type: 'feature',
+        title: 'New Share Type: Share Screen',
+        description:
+          'Added a new share type that allows users to share their screen in real-time with a remote peer. This feature supports sharing the entire screen, a specific application window, or a browser tab. It is designed to facilitate remote collaboration and presentations.',
+      },
+      {
+        type: 'tweak',
+        title: 'New UI for Multiple Share Types',
+        description:
+          'Added a new user interface that allows users to select from multiple share types (e.g., file, folder, text) when initiating a transfer. This provides a more intuitive and streamlined experience for users with different sharing needs.',
+      },
+    ]
+  },
+  {
+    date: 'April 24, 2026',
+    version: '1.2.2',
+    changes: [
+      {
+        type: 'fix',
+        title: 'Fix large file WebRTC disconnection and large folder ZIP page refresh',
+        description:
+          'Two distinct bugs affecting large transfers: (1) WebRTC peer connections drop mid-transfer on large files due to send-buffer overflow; (2) dropping a large folder either hangs or causes a tab crash that looks like a page refresh, and no ZIP is produced.',
+      },
+    ]
+  },
+  {
     date: 'April 11, 2026',
     version: '1.2.1',
     changes: [

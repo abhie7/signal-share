@@ -22,6 +22,9 @@ import { formatBytes } from '@/lib/webrtc/file-chunker';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Alert01Icon, SecurityLockIcon } from '@hugeicons/core-free-icons';
 import { InfoSection } from '@/components/share/info-section';
+import { ShareTypeNav } from '@/components/share/share-type-nav';
+import { ScreenSharePanel } from '@/components/share/screen-share-placeholder';
+import { ScreenCallStage } from '@/components/share/screen-call-stage';
 import type { NearbyPeer } from '@/lib/stores/peers-store';
 
 import type { ErrorDetails, FileInfo } from '@/lib/stores/transfer-store';
@@ -80,13 +83,15 @@ function TransferErrorCard({
 }
 
 function HomeView() {
-  const [mode, setMode] = useState<'local' | 'link'>('local');
   const [stagingFiles, setStagingFiles] = useState<File[]>([]);
   const [textDraft, setTextDraft] = useState('');
   const [textStatus, setTextStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [textStatusMessage, setTextStatusMessage] = useState('');
-  const { shareFiles, shareText, sendToPeer, joinByCode, sendEncryptedText } = useTransfer();
+  const { shareFiles, shareText, sendToPeer, joinByCode, sendEncryptedText, shareScreen } = useTransfer();
   const files = useTransferStore((s) => s.files);
+  const textStream = useTransferStore((s) => s.textStream);
+  const shareType = useAppStore((s) => s.shareType);
+  const setShareType = useAppStore((s) => s.setShareType);
 
   useEffect(() => {
     const handleStageFiles = (e: Event) => {
@@ -96,7 +101,7 @@ function HomeView() {
         return;
       }
 
-      setMode('local');
+      setShareType('files');
       setStagingFiles((prev) => [...prev, ...incomingFiles]);
     };
 
@@ -104,7 +109,7 @@ function HomeView() {
     return () => {
       window.removeEventListener('signalshare:stage-files', handleStageFiles as EventListener);
     };
-  }, []);
+  }, [setShareType]);
 
   const handlePeerClick = async (peer: NearbyPeer) => {
     if (stagingFiles.length > 0) {
@@ -145,76 +150,79 @@ function HomeView() {
       animate="animate"
       exit="exit"
       transition={{ duration: 0.4 }}
-      className="relative w-full min-h-screen flex flex-col items-center justify-center pt-20 pb-72 lg:pb-8"
+      className="relative w-full min-h-screen pt-20 pb-8 px-3 sm:px-6"
     >
-      {/* Mode Toggle */}
-      <div className="fixed top-24 left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 z-40 flex items-center rounded-full border border-primary/20 bg-background/60 backdrop-blur-md p-1 shadow-[0_0_15px_rgba(var(--primary),0.1)]">
-        <button
-          onClick={() => setMode('local')}
-          className={`px-4 py-1.5 rounded-full text-[10px] font-mono uppercase tracking-widest transition-all ${mode === 'local'
-              ? 'bg-primary/20 text-primary shadow-[0_0_10px_rgba(var(--primary),0.2)]'
-              : 'text-muted-foreground hover:text-foreground'
-            }`}
-        >
-          Send
-        </button>
-        <button
-          onClick={() => setMode('link')}
-          className={`px-4 py-1.5 rounded-full text-[10px] font-mono uppercase tracking-widest transition-all ${mode === 'link'
-              ? 'bg-primary/20 text-primary shadow-[0_0_10px_rgba(var(--primary),0.2)]'
-              : 'text-muted-foreground hover:text-foreground'
-            }`}
-        >
-          Receive
-        </button>
-      </div>
+      <ShareTypeNav
+        activeType={shareType}
+        onSelect={(type) => setShareType(type)}
+        className="sticky top-20 z-40 mb-4 grid grid-flow-col auto-cols-[minmax(11rem,1fr)] gap-2 overflow-x-auto rounded-2xl border border-border/40 bg-background/70 p-2 backdrop-blur-xl lg:hidden"
+      />
 
-      <AnimatePresence mode="wait">
-        {mode === 'local' ? (
-          <motion.div
-            key="local"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.4 }}
-            className="w-full h-full flex flex-col items-center justify-center relative px-4 lg:px-0"
+      <div className="mx-auto grid w-full max-w-[1800px] gap-4 lg:grid-cols-[18rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_24rem]">
+        <aside className="hidden lg:block">
+          <div className="sticky top-28 space-y-3 rounded-3xl border border-border/50 bg-card/25 p-4 backdrop-blur-xl">
+            <p className="px-2 text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground">Share Type</p>
+            <ShareTypeNav
+              activeType={shareType}
+              onSelect={(type) => setShareType(type)}
+              className="grid gap-2"
+            />
+          </div>
+        </aside>
+
+        <AnimatePresence mode="wait">
+          <motion.section
+            key={shareType}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25 }}
+            className="min-h-[62vh] rounded-3xl border border-primary/15 bg-card/15 p-4 sm:p-6 xl:p-10 backdrop-blur-lg"
           >
-            {/* Visual Hero Text */}
-            <div className={`absolute top-10 md:top-20 flex flex-col items-center text-center px-4 z-20 pointer-events-none transition-opacity duration-300 ${stagingFiles.length > 0 ? 'opacity-0' : 'opacity-100'}`}>
-              <h1 className="text-xl md:text-3xl font-bold tracking-widest uppercase text-foreground/90 mb-2">
-                Transmit files directly across your network
-              </h1>
-              <p className="text-xs md:text-sm font-mono text-muted-foreground uppercase tracking-wider">
-                Live peer-to-peer signal transfer. No accounts. No storage. No cloud.
-              </p>
-            </div>
-
-            {stagingFiles.length > 0 ? (
-              <div className="z-30 w-full max-w-md bg-background border border-primary/20 rounded-3xl p-4 sm:p-6 shadow-[0_0_30px_rgba(var(--primary),0.1)] mb-72 lg:mb-0 mt-8 max-h-[70vh] flex flex-col">
-                <FileDropZone
-                  initialFiles={stagingFiles}
-                  onFilesSelected={(filesToShare) => {
-                    setStagingFiles([]);
-                    shareFiles(filesToShare);
-                  }}
-                />
-                <Button
-                  variant="ghost"
-                  onClick={() => setStagingFiles([])}
-                  className="w-full mt-4 text-muted-foreground hover:text-destructive text-xs uppercase tracking-widest font-mono"
-                >
-                  Cancel sharing
-                </Button>
-              </div>
-            ) : (
-              <div className="w-full flex flex-col items-center gap-6">
-                <RadarScanner onFilesSelected={setStagingFiles} />
-
-                <div className="w-full max-w-md rounded-2xl border border-primary/20 bg-card/20 p-4 backdrop-blur-md shadow-[0_0_20px_rgba(var(--primary),0.08)]">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-xs font-mono uppercase tracking-widest text-foreground/80">Encrypted text snippet</p>
-                    <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Click any nearby node to send</p>
+            {shareType === 'files' && (
+              <div className="space-y-6">
+                <div className={`text-center transition-opacity ${stagingFiles.length > 0 ? 'opacity-0 lg:opacity-100' : 'opacity-100'}`}>
+                  <h1 className="text-xl sm:text-2xl xl:text-4xl font-bold tracking-widest uppercase text-foreground/90 mb-2">
+                    Share Files, Folders, and Archives
+                  </h1>
+                  <p className="text-[11px] sm:text-xs font-mono text-muted-foreground uppercase tracking-wider">
+                    Direct transfer with no account and no storage.
+                  </p>
+                </div>
+                {stagingFiles.length > 0 ? (
+                  <div className="mx-auto w-full max-w-2xl">
+                    <FileDropZone
+                      initialFiles={stagingFiles}
+                      onFilesSelected={(filesToShare) => {
+                        setStagingFiles([]);
+                        shareFiles(filesToShare);
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      onClick={() => setStagingFiles([])}
+                      className="w-full mt-4 text-muted-foreground hover:text-destructive text-xs uppercase tracking-widest font-mono"
+                    >
+                      Cancel sharing
+                    </Button>
                   </div>
+                ) : (
+                  <div className="w-full flex flex-col items-center gap-6">
+                    <RadarScanner onFilesSelected={setStagingFiles} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {shareType === 'text' && (
+              <div className="mx-auto w-full max-w-3xl space-y-5">
+                <div className="text-center space-y-2">
+                  <h2 className="text-xl sm:text-2xl xl:text-3xl font-bold tracking-widest uppercase text-foreground/90">Text Sharing</h2>
+                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+                    End-to-end encrypted text stream with chunked delivery.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-primary/20 bg-card/30 p-4 sm:p-6 backdrop-blur-md">
                   <Textarea
                     value={textDraft}
                     onChange={(e) => {
@@ -224,16 +232,20 @@ function HomeView() {
                         setTextStatusMessage('');
                       }
                     }}
-                    maxLength={4000}
-                    placeholder="Type a note, password, or quick instruction..."
-                    className="min-h-24 bg-background/50"
+                    placeholder="Type any length text..."
+                    className="min-h-56 sm:min-h-72 bg-background/50 text-sm"
                   />
-                  <div className="mt-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono uppercase tracking-wider">
                     <span className={`${textStatus === 'error' ? 'text-destructive' : textStatus === 'sent' ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                      {textStatusMessage || 'Payload is encrypted before delivery'}
+                      {textStatusMessage || 'Chunked encrypted streaming enabled'}
                     </span>
-                    <span className="text-muted-foreground">{textDraft.length}/4000</span>
+                    <span className="text-muted-foreground">{textDraft.length.toLocaleString()} chars</span>
                   </div>
+                  {textStream.totalChunks > 0 && (
+                    <p className="mt-2 text-[10px] font-mono uppercase tracking-wider text-primary/80">
+                      stream {textStream.chunksSent}/{textStream.totalChunks} chunks • {textStream.bytesSent}/{textStream.totalBytes} chars sent
+                    </p>
+                  )}
                   <Button
                     onClick={() => {
                       try {
@@ -247,7 +259,7 @@ function HomeView() {
                       }
                     }}
                     variant="outline"
-                    className="w-full mt-3 border-primary/30 text-primary hover:bg-primary/10 font-mono uppercase tracking-widest text-xs"
+                    className="w-full mt-4 border-primary/30 text-primary hover:bg-primary/10 font-mono uppercase tracking-widest text-xs"
                   >
                     Share Text via Code/Link/QR
                   </Button>
@@ -255,66 +267,48 @@ function HomeView() {
               </div>
             )}
 
-            {/* Nearby Devices Panel */}
-            <div className="fixed right-6 top-32 bottom-6 w-80 hidden lg:flex flex-col gap-4 z-30">
-              <NearbyPeers onPeerClick={handlePeerClick} />
-            </div>
+            {shareType === 'screen' && (
+              <ScreenSharePanel
+                onShareSelf={() => shareScreen('share-self', false)}
+                onRequestRemote={() => shareScreen('request-remote', false)}
+              />
+            )}
 
-            {/* Mobile Nearby Devices */}
-            <div className="fixed bottom-0 left-0 right-0 h-[38vh] max-h-72 lg:hidden z-30 p-4">
-              <NearbyPeers onPeerClick={handlePeerClick} />
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="link"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.4 }}
-            className="w-full max-w-md px-4 sm:px-0 flex flex-col items-center gap-6 sm:gap-8"
-          >
-            <div className="text-center space-y-2">
-              <h2 className="text-2xl font-bold tracking-widest uppercase text-foreground/90">Join Transmission</h2>
-              <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Enter a secure relay key</p>
-            </div>
-
-            <div className="w-full rounded-2xl border border-primary/20 bg-card/20 p-5 sm:p-8 backdrop-blur-xl shadow-[0_0_30px_rgba(var(--primary),0.1)] flex flex-col items-center gap-6 sm:gap-8">
-              {/* Waveform animation */}
-              <div className="flex items-center justify-center gap-1 h-12 w-full">
-                {[...Array(20)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    className="w-1 bg-primary/60 rounded-full"
-                    animate={{ height: ['20%', '100%', '20%'] }}
-                    transition={{
-                      repeat: Infinity,
-                      duration: 1.5,
-                      delay: i * 0.1,
-                      ease: "easeInOut"
-                    }}
-                  />
-                ))}
+            {shareType === 'receive' && (
+              <div className="mx-auto w-full max-w-xl flex flex-col items-center gap-6 sm:gap-8">
+                <div className="text-center space-y-2">
+                  <h2 className="text-2xl font-bold tracking-widest uppercase text-foreground/90">Join Transmission</h2>
+                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Enter a secure relay key</p>
+                </div>
+                <div className="w-full rounded-2xl border border-primary/20 bg-card/20 p-5 sm:p-8 backdrop-blur-xl shadow-[0_0_30px_rgba(var(--primary),0.1)]">
+                  <TransferCode mode="input" onCodeSubmit={joinByCode} />
+                </div>
               </div>
+            )}
+          </motion.section>
+        </AnimatePresence>
 
-              <div className="w-full">
-                <TransferCode mode="input" onCodeSubmit={joinByCode} />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <aside className="lg:sticky lg:top-28 lg:h-[calc(100vh-8rem)]">
+          <NearbyPeers onPeerClick={handlePeerClick} />
+        </aside>
+      </div>
     </motion.div>
   );
 }
 
 function SendingView() {
-  const { transferCode, shareLink, status, cancelTransfer, goHome } = useTransfer();
+  const { transferCode, shareLink, status, cancelTransfer, goHome, getRemoteStream, getLocalPreviewStream } = useTransfer();
   const transferKind = useTransferStore((s) => s.transferKind);
+  const screenStatus = useTransferStore((s) => s.screenStatus);
+  const screenRenderNonce = useTransferStore((s) => s.screenRenderNonce);
+  const isScreenSharer = useTransferStore((s) => s.isScreenSharer);
   const remotePeerName = useTransferStore((s) => s.remotePeerName);
   const error = useTransferStore((s) => s.error);
   const errorDetails = useTransferStore((s) => s.errorDetails);
   const fileInfos = useTransferStore((s) => s.fileInfos);
+  const remoteStream = transferKind === 'screen' ? getRemoteStream() : null;
+  const localPreviewStream = transferKind === 'screen' ? getLocalPreviewStream() : null;
+  void screenRenderNonce;
 
   return (
     <motion.div
@@ -333,7 +327,7 @@ function SendingView() {
         >
           {status === 'waiting' && 'Awaiting Connection'}
           {status === 'connecting' && 'Establishing Link'}
-          {status === 'transferring' && (transferKind === 'text' ? 'Sending Encrypted Text' : 'Transmitting Data')}
+          {status === 'transferring' && (transferKind === 'text' ? 'Sending Encrypted Text' : transferKind === 'screen' ? 'Screen Session Live' : 'Transmitting Data')}
           {status === 'complete' && (transferKind === 'text' ? 'Message Delivered' : 'Transmission Complete')}
           {status === 'error' && 'Transmission Failed'}
           {status === 'cancelled' && 'Transmission Aborted'}
@@ -407,7 +401,7 @@ function SendingView() {
       )}
 
       {/* Connecting animation */}
-      {status === 'connecting' && (
+      {status === 'connecting' && transferKind !== 'screen' && (
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -434,6 +428,16 @@ function SendingView() {
         <div className="rounded-2xl border border-primary/20 bg-card/20 px-6 py-4 text-xs font-mono uppercase tracking-widest text-primary">
           Encrypting and delivering message payload...
         </div>
+      )}
+
+      {transferKind === 'screen' && (
+        <ScreenCallStage
+          remotePeerName={remotePeerName}
+          isSharer={isScreenSharer}
+          viewerStream={remoteStream}
+          localPreviewStream={localPreviewStream}
+          onAbort={cancelTransfer}
+        />
       )}
 
       {/* Confetti on complete */}
@@ -473,12 +477,19 @@ function SendingView() {
 }
 
 function ReceivingView() {
-  const { status, goHome, cancelTransfer } = useTransfer();
+  const { status, goHome, cancelTransfer, getRemoteStream, getLocalPreviewStream, acceptScreenPrompt, declineScreenPrompt } = useTransfer();
   const transferKind = useTransferStore((s) => s.transferKind);
+  const screenStatus = useTransferStore((s) => s.screenStatus);
+  const screenRenderNonce = useTransferStore((s) => s.screenRenderNonce);
+  const isScreenSharer = useTransferStore((s) => s.isScreenSharer);
+  const screenPrompt = useTransferStore((s) => s.screenPrompt);
   const remotePeerName = useTransferStore((s) => s.remotePeerName);
   const error = useTransferStore((s) => s.error);
   const errorDetails = useTransferStore((s) => s.errorDetails);
   const fileInfos = useTransferStore((s) => s.fileInfos);
+  const remoteStream = transferKind === 'screen' ? getRemoteStream() : null;
+  const localPreviewStream = transferKind === 'screen' ? getLocalPreviewStream() : null;
+  void screenRenderNonce;
 
   return (
     <motion.div
@@ -496,7 +507,7 @@ function ReceivingView() {
           animate={{ opacity: 1, y: 0 }}
         >
           {status === 'connecting' && 'Establishing Link'}
-          {status === 'transferring' && (transferKind === 'text' ? 'Receiving Encrypted Text' : 'Receiving Data')}
+          {status === 'transferring' && (transferKind === 'text' ? 'Receiving Encrypted Text' : transferKind === 'screen' ? 'Screen Session Live' : 'Receiving Data')}
           {status === 'complete' && (transferKind === 'text' ? 'Message Received' : 'Transmission Complete')}
           {status === 'error' && 'Transmission Failed'}
           {status === 'cancelled' && 'Transmission Aborted'}
@@ -514,7 +525,7 @@ function ReceivingView() {
       </div>
 
       {/* Connecting animation */}
-      {status === 'connecting' && (
+      {status === 'connecting' && transferKind !== 'screen' && (
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -541,6 +552,16 @@ function ReceivingView() {
         <div className="rounded-2xl border border-primary/20 bg-card/20 px-6 py-4 text-xs font-mono uppercase tracking-widest text-primary">
           Waiting for secure text payload...
         </div>
+      )}
+
+      {transferKind === 'screen' && (
+        <ScreenCallStage
+          remotePeerName={remotePeerName}
+          isSharer={isScreenSharer}
+          viewerStream={remoteStream}
+          localPreviewStream={localPreviewStream}
+          onAbort={cancelTransfer}
+        />
       )}
 
       {/* Confetti on complete */}
@@ -575,6 +596,36 @@ function ReceivingView() {
           </Button>
         )}
       </div>
+      <AnimatePresence>
+        {screenPrompt.visible && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 12 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 12 }}
+              className="w-full max-w-md rounded-2xl border border-primary/30 bg-background/90 p-6 text-center backdrop-blur-xl"
+            >
+              <h3 className="text-lg font-bold uppercase tracking-widest text-foreground/90">Screen Share Request</h3>
+              <p className="mt-2 text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                {screenPrompt.requesterName || 'A device'} asked you to share your screen.
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <Button variant="outline" className="font-mono uppercase tracking-widest text-xs" onClick={declineScreenPrompt}>
+                  Decline
+                </Button>
+                <Button className="font-mono uppercase tracking-widest text-xs" onClick={() => void acceptScreenPrompt()}>
+                  Start Sharing
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
