@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { copyTextToClipboard } from '@/lib/utils';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Copy01Icon as CopyIcon, CheckmarkCircle02Icon as CheckIcon } from '@hugeicons/core-free-icons';
 
@@ -14,13 +15,15 @@ export function ShareLink({ link }: ShareLinkProps) {
   const [copied, setCopied] = useState(false);
 
   const copyLink = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch (err) {
-      console.error('Failed to copy link:', err);
+    const copiedSuccessfully = await copyTextToClipboard(link);
+
+    if (!copiedSuccessfully) {
+      console.error('Failed to copy link: clipboard unavailable');
+      return;
     }
+
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   }, [link]);
 
   return (

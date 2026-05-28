@@ -523,8 +523,10 @@ function handleScreenShareAccepted(peerId: string, msg: WsMessage): void {
   const sessionId = msg.sessionId as string;
   const session = sessionRegistry.getById(sessionId);
   if (!session || session.transferType !== 'screen') return;
-  const targetId = msg.targetId as string;
-  const targetPeer = peerRegistry.get(targetId);
+  if (peerId !== session.senderId && peerId !== session.receiverId) return;
+  const expectedTargetId = peerId === session.senderId ? session.receiverId : session.senderId;
+  if (!expectedTargetId || msg.targetId !== expectedTargetId) return;
+  const targetPeer = peerRegistry.get(expectedTargetId);
   if (!targetPeer) return;
   safeSend(targetPeer.ws, {
     type: 'screen-share-accepted',
@@ -538,8 +540,10 @@ function handleScreenShareDeclined(peerId: string, msg: WsMessage): void {
   const sessionId = msg.sessionId as string;
   const session = sessionRegistry.getById(sessionId);
   if (!session || session.transferType !== 'screen') return;
-  const targetId = msg.targetId as string;
-  const targetPeer = peerRegistry.get(targetId);
+  if (peerId !== session.senderId && peerId !== session.receiverId) return;
+  const expectedTargetId = peerId === session.senderId ? session.receiverId : session.senderId;
+  if (!expectedTargetId || msg.targetId !== expectedTargetId) return;
+  const targetPeer = peerRegistry.get(expectedTargetId);
   if (!targetPeer) return;
   safeSend(targetPeer.ws, {
     type: 'screen-share-declined',

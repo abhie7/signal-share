@@ -155,13 +155,14 @@ function HomeView() {
       <ShareTypeNav
         activeType={shareType}
         onSelect={(type) => setShareType(type)}
-        className="sticky top-20 z-40 mb-4 grid grid-flow-col auto-cols-[minmax(11rem,1fr)] gap-2 overflow-x-auto rounded-2xl border border-border/40 bg-background/70 p-2 backdrop-blur-xl lg:hidden"
+        compact
+        className="sticky top-20 z-40 mb-4 rounded-2xl border border-border/40 bg-background/70 p-2 backdrop-blur-xl lg:hidden"
       />
 
       <div className="mx-auto grid w-full max-w-[1800px] gap-4 lg:grid-cols-[18rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_24rem]">
         <aside className="hidden lg:block">
-          <div className="sticky top-28 space-y-3 rounded-3xl border border-border/50 bg-card/25 p-4 backdrop-blur-xl">
-            <p className="px-2 text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground">Share Type</p>
+          <div className="sticky top-20 space-y-3 rounded-3xl border border-border/50 bg-card/25 p-4 backdrop-blur-xl">
+            <p className="px-2 text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground">Share or Receive</p>
             <ShareTypeNav
               activeType={shareType}
               onSelect={(type) => setShareType(type)}

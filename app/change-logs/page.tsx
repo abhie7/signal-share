@@ -8,6 +8,24 @@ export const metadata = {
 
 const changelogs = [
   {
+    date: 'May 28, 2026',
+    version: '1.2.4',
+    changes: [
+      {
+        type: 'fix',
+        title: 'Screen Share Stability Improvements',
+        description:
+          'Addressed various stability issues with the new screen sharing feature, including improved handling of different screen resolutions and better performance on lower-end devices.',
+      },
+      {
+        type: 'tweak',
+        title: 'Updated UI for Multiple Share Types and Receiver Experience',
+        description:
+          'Tweaked UI to improve Share or Recieve section for better clarity and user experience. Mobile UI is not easier to use and select.',
+      },
+    ]
+  },
+  {
     date: 'May 19, 2026',
     version: '1.2.3',
     changes: [
