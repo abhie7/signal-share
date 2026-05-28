@@ -172,11 +172,17 @@ export function useTransfer() {
       const sid = msg.sessionId as string;
       const viewerId = msg.fromId as string;
       const state = useTransferStore.getState();
+      const isCurrentSession = state.sessionId === sid;
+      const isCurrentPeer = state.remotePeerId === viewerId;
+
       if (
         state.transferKind === 'screen' &&
         state.isScreenSharer &&
+        state.role === 'sender' &&
         viewerId &&
-        sid
+        sid &&
+        isCurrentSession &&
+        isCurrentPeer
       ) {
         void startSharing(viewerId, sid);
       }

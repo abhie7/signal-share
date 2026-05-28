@@ -32,17 +32,17 @@ export class ScreenConnectionManager {
   private setupSignalingListeners(): void {
     this.cleanupFns.push(
       signaling.on('rtc-offer', (msg) => {
-        if (msg.fromId === this.targetPeerId) {
+        if (msg.fromId === this.targetPeerId && msg.sessionId === this.sessionId) {
           void this.handleOffer(msg.sdp as RTCSessionDescriptionInit);
         }
       }),
       signaling.on('rtc-answer', (msg) => {
-        if (msg.fromId === this.targetPeerId) {
+        if (msg.fromId === this.targetPeerId && msg.sessionId === this.sessionId) {
           void this.handleAnswer(msg.sdp as RTCSessionDescriptionInit);
         }
       }),
       signaling.on('rtc-ice-candidate', (msg) => {
-        if (msg.fromId === this.targetPeerId) {
+        if (msg.fromId === this.targetPeerId && msg.sessionId === this.sessionId) {
           void this.handleIceCandidate(msg.candidate as RTCIceCandidateInit);
         }
       }),

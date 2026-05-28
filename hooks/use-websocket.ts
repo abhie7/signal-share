@@ -28,6 +28,10 @@ interface IncomingTextStream {
   receivedCount: number;
 }
 
+const TEXT_CHUNK_SIZE = 48 * 1024;
+const MAX_TEXT_BYTES = 10 * 1024 * 1024;
+const MAX_TEXT_CHUNKS = Math.ceil(MAX_TEXT_BYTES / TEXT_CHUNK_SIZE);
+
 export function useWebSocket() {
   const initialized = useRef(false);
   const pendingTextKeys = useRef<Map<string, PendingTextKeyExchange>>(new Map());
@@ -60,6 +64,11 @@ export function useWebSocket() {
     initialized.current = true;
 
     const cleanups: Array<() => void> = [];
+
+    const cleanupIncomingTextStream = (requestId: string) => {
+      incomingTextStreams.current.delete(requestId);
+      pendingTextKeys.current.delete(requestId);
+    };
 
     // Connect
     signaling.connect();
@@ -291,6 +300,10 @@ export function useWebSocket() {
             !sessionId ||
             typeof totalChunks !== 'number' ||
             typeof totalLength !== 'number' ||
+            !Number.isFinite(totalChunks) ||
+            !Number.isSafeInteger(totalChunks) ||
+            totalChunks <= 0 ||
+            totalChunks > MAX_TEXT_CHUNKS ||
             !iv ||
             !ciphertext
           ) {
@@ -382,6 +395,7 @@ export function useWebSocket() {
           }
 
           if (stream.chunks.some((chunk) => typeof chunk !== 'string')) {
+            cleanupIncomingTextStream(requestId);
             return;
           }
 
@@ -396,8 +410,7 @@ export function useWebSocket() {
             textContent,
           });
 
-          incomingTextStreams.current.delete(requestId);
-          pendingTextKeys.current.delete(requestId);
+          cleanupIncomingTextStream(requestId);
           updateTextStream({
             assembling: false,
             bytesReceived: textContent.length,

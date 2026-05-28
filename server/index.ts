@@ -15,7 +15,7 @@ const hostname = '0.0.0.0';
 
 async function main() {
   // Prepare Next.js
-  const app = next({ dev, hostname, port });
+  const app = next({ dev });
   const handle = app.getRequestHandler();
   await app.prepare();
 
@@ -24,7 +24,6 @@ async function main() {
     logger: {
       level: dev ? 'info' : 'warn',
     },
-    // Increase body size limit for file metadata
     bodyLimit: 10 * 1024 * 1024, // 10MB
   });
 
@@ -35,7 +34,7 @@ async function main() {
 
   await fastify.register(fastifyWebsocket, {
     options: {
-      maxPayload: 2 * 1024 * 1024, // 2MB per WS message (for file chunks)
+      maxPayload: 2 * 1024 * 1024, // 2MB
     },
   });
 
@@ -44,40 +43,64 @@ async function main() {
   await fastify.register(wsRoutes);
   await fastify.register(transferRoutes);
 
-  // Pass all other requests to Next.js
-  // Use a raw handler instead of fastify.all to avoid route conflicts with CORS plugin
-  fastify.route({
-    method: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD'],
-    url: '/*',
-    handler: async (request, reply) => {
-      const parsedUrl = parse(request.url, true);
-      await handle(request.raw, reply.raw, parsedUrl);
+  // Skip Next.js handling for WebSocket upgrade requests entirely —
+  // otherwise Fastify sends a reply and then @fastify/websocket also tries to,
+  // causing the "Reply was already sent" error on /api/ws
+  fastify.addHook('onRequest', async (request, reply) => {
+    if (request.headers.upgrade?.toLowerCase() === 'websocket') return;
+
+    const url = request.raw.url || '';
+    if (url.startsWith('/_next/') || url.startsWith('/__nextjs_')) {
       reply.hijack();
-    },
+      await handle(request.raw, reply.raw, parse(url, true));
+    }
   });
 
-  // Start server
-  try {
-    await fastify.listen({ port, host: hostname });
-    console.log(`\n  🚀 P2P Share running at http://localhost:${port}\n`);
+  // Catch-all for all other pages/routes → Next.js
+  fastify.setNotFoundHandler(async (request, reply) => {
+    reply.hijack();
+    await handle(request.raw, reply.raw, parse(request.url, true));
+  });
 
-    // Ping health endpoint every 14 minutes to prevent Render sleep mode
-    if (process.env.NODE_ENV === 'production') {
-      cron.schedule('*/14 * * * *', async () => {
-        try {
-          const host = process.env.HOST || `localhost:${port}`;
-          await fetch(`http://${host}/health`);
-          console.log(`[${new Date().toISOString()}] Health check ping sent`);
-        } catch (err) {
-          console.error('Health check ping failed:', err);
-        }
-      });
-      console.log('Health check pinging enabled (every 14 minutes)\n');
+  await fastify.listen({ port, host: hostname });
+
+  // Hijack upgrade listeners so HMR is handled BEFORE @fastify/websocket sees it.
+  // @fastify/websocket registers its own 'upgrade' listener during plugin registration,
+  // so we snapshot those, wipe them, and prepend our own router.
+  const existingUpgradeListeners = fastify.server.listeners('upgrade').slice();
+  fastify.server.removeAllListeners('upgrade');
+
+  fastify.server.on('upgrade', (req, socket, head) => {
+    const url = req.url || '';
+
+    if (dev && url.startsWith('/_next/webpack-hmr')) {
+      // Hand off directly to Next.js internal HMR handler
+      app.getUpgradeHandler()(req, socket, head);
+      return;
     }
-  } catch (err) {
-    fastify.log.error(err);
-    process.exit(1);
+
+    // All other WS upgrades (your /api/ws etc.) → @fastify/websocket
+    for (const listener of existingUpgradeListeners) {
+      (listener as Function)(req, socket, head);
+    }
+  });
+
+  console.log(`\n  🚀 P2P Share running at http://localhost:${port}\n`);
+
+  if (process.env.NODE_ENV === 'production') {
+    cron.schedule('*/14 * * * *', async () => {
+      try {
+        const host = process.env.HOST || `localhost:${port}`;
+        await fetch(`http://${host}/health`);
+        console.log(`[${new Date().toISOString()}] Health check ping sent`);
+      } catch (err) {
+        console.error('Health check ping failed:', err);
+      }
+    });
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

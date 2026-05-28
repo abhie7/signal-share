@@ -7,6 +7,7 @@ import { AppShell } from '@/components/share/app-shell';
 import { TransferProgress } from '@/components/share/transfer-progress';
 import { DeviceAvatar } from '@/components/share/device-avatar';
 import { Button } from '@/components/ui/button';
+import { ScreenCallStage } from '@/components/share/screen-call-stage';
 import { useTransfer } from '@/hooks/use-transfer';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { useAppStore } from '@/lib/stores/app-store';
@@ -35,10 +36,16 @@ export default function ReceivePage() {
   const [error, setError] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
 
-  const { joinByLink, acceptScreenPrompt, declineScreenPrompt } = useTransfer();
+  const { joinByLink, acceptScreenPrompt, declineScreenPrompt, getRemoteStream, getLocalPreviewStream } = useTransfer();
   const status = useTransferStore((s) => s.status);
   const screenPrompt = useTransferStore((s) => s.screenPrompt);
+  const screenRenderNonce = useTransferStore((s) => s.screenRenderNonce);
+  const isScreenSharer = useTransferStore((s) => s.isScreenSharer);
+  const remotePeerName = useTransferStore((s) => s.remotePeerName);
   const isConnected = useAppStore((s) => s.isConnected);
+  const remoteStream = sessionInfo?.transferType === 'screen' ? getRemoteStream() : null;
+  const localPreviewStream = sessionInfo?.transferType === 'screen' ? getLocalPreviewStream() : null;
+  void screenRenderNonce;
 
   // Fetch session info
   useEffect(() => {
@@ -210,6 +217,35 @@ export default function ReceivePage() {
                   <HugeiconsIcon icon={SecurityLockIcon} className="w-3 h-3 text-emerald-400" />
                   <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest">100% E2E Encrypted</span>
                 </div>
+              </div>
+            </div>
+          ) : sessionInfo.transferType === 'screen' ? (
+            <div className="space-y-8">
+              <ScreenCallStage
+                remotePeerName={remotePeerName}
+                isSharer={isScreenSharer}
+                viewerStream={remoteStream}
+                localPreviewStream={localPreviewStream}
+                onAbort={() => window.location.href = '/'}
+              />
+
+              <div className="flex justify-center">
+                {status === 'complete' ? (
+                  <Button
+                    onClick={() => window.location.href = '/'}
+                    className="bg-primary/20 text-primary hover:bg-primary/30 border border-primary/50 font-mono uppercase tracking-widest"
+                  >
+                    Done
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => window.location.href = '/'}
+                    className="border-destructive/50 text-destructive hover:bg-destructive/10 font-mono uppercase tracking-widest"
+                  >
+                    Abort
+                  </Button>
+                )}
               </div>
             </div>
           ) : (

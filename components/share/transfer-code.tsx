@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { copyTextToClipboard } from '@/lib/utils';
 
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Tick01Icon, Copy01Icon } from '@hugeicons/core-free-icons';
@@ -63,11 +64,19 @@ export function TransferCode({ mode, code, onCodeSubmit }: TransferCodeProps) {
   );
 
   const copyCode = useCallback(async () => {
-    if (code) {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    if (!code) {
+      return;
     }
+
+    const copiedSuccessfully = await copyTextToClipboard(code);
+
+    if (!copiedSuccessfully) {
+      console.error('Failed to copy code: clipboard unavailable');
+      return;
+    }
+
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }, [code]);
 
   if (mode === 'display' && code) {

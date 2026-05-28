@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useTransferStore } from '@/lib/stores/transfer-store';
+import { copyTextToClipboard } from '@/lib/utils';
 import { formatBytes } from '@/lib/webrtc/file-chunker';
 import { DeviceAvatar } from './device-avatar';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -25,20 +26,22 @@ export function ReceivePrompt({ onAccept, onDecline, onDismissText }: ReceivePro
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(incomingTransfer.textContent);
-      setCopied(true);
+    const copiedSuccessfully = await copyTextToClipboard(incomingTransfer.textContent);
 
-      if (copyResetTimeoutRef.current) {
-        clearTimeout(copyResetTimeoutRef.current);
-      }
-
-      copyResetTimeoutRef.current = setTimeout(() => {
-        setCopied(false);
-      }, 1800);
-    } catch (error) {
-      console.error('Failed to copy incoming text:', error);
+    if (!copiedSuccessfully) {
+      console.error('Failed to copy incoming text: clipboard unavailable');
+      return;
     }
+
+    setCopied(true);
+
+    if (copyResetTimeoutRef.current) {
+      clearTimeout(copyResetTimeoutRef.current);
+    }
+
+    copyResetTimeoutRef.current = setTimeout(() => {
+      setCopied(false);
+    }, 1800);
   };
 
   return (

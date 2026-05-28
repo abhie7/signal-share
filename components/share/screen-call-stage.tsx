@@ -53,13 +53,19 @@ export function ScreenCallStage({
 
   const toggleFullscreen = async () => {
     if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      await containerRef.current.requestFullscreen();
-      setIsFullscreen(true);
-      return;
+
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+        return;
+      }
+
+      await document.exitFullscreen();
+      setIsFullscreen(false);
+    } catch (error) {
+      console.error('Failed to toggle fullscreen:', error);
     }
-    await document.exitFullscreen();
-    setIsFullscreen(false);
   };
 
   return (
