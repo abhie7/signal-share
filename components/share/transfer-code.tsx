@@ -94,7 +94,7 @@ export function TransferCode({ mode, code, onCodeSubmit }: TransferCodeProps) {
                 damping: 20,
                 delay: i * 0.08,
               }}
-              className="flex h-12 w-10 items-center justify-center rounded-lg border border-primary/30 bg-primary/5 text-2xl font-mono font-bold text-primary shadow-[0_0_10px_rgba(var(--primary),0.2)]"
+              className="flex h-10 w-8 xs:h-12 xs:w-10 items-center justify-center rounded-lg border border-primary/30 bg-primary/5 text-xl xs:text-2xl font-mono font-bold text-primary shadow-[0_0_10px_rgba(var(--primary),0.2)]"
             >
               {digit}
             </motion.div>
@@ -151,7 +151,7 @@ export function TransferCode({ mode, code, onCodeSubmit }: TransferCodeProps) {
               initial={{ y: 10, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: i * 0.05 }}
-              className="flex h-12 w-10 items-center justify-center rounded-lg border border-primary/30 bg-primary/5 text-center text-2xl font-mono font-bold text-primary shadow-[0_0_10px_rgba(var(--primary),0.1)] outline-none transition-all focus:border-primary focus:bg-primary/10 focus:shadow-[0_0_15px_rgba(var(--primary),0.3)]"
+              className="flex h-10 w-8 xs:h-12 xs:w-10 items-center justify-center rounded-lg border border-primary/30 bg-primary/5 text-center text-xl xs:text-2xl font-mono font-bold text-primary shadow-[0_0_10px_rgba(var(--primary),0.1)] outline-none transition-all focus:border-primary focus:bg-primary/10 focus:shadow-[0_0_15px_rgba(var(--primary),0.3)]"
             />
           ))}
         </div>

@@ -71,7 +71,7 @@ export function ScreenCallStage({
   return (
     <div
       ref={containerRef}
-      className="relative h-[calc(100vh-6.5rem)] min-h-130 w-full overflow-hidden rounded-3xl border border-primary/25 bg-black shadow-[0_20px_120px_rgba(0,0,0,0.45)]"
+      className="relative h-[calc(100vh-6.5rem)] min-h-[300px] sm:min-h-[450px] lg:min-h-[520px] w-full overflow-hidden rounded-3xl border border-primary/25 bg-black shadow-[0_20px_120px_rgba(0,0,0,0.45)]"
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_10%,rgba(var(--primary),0.22),transparent_42%),radial-gradient(circle_at_80%_84%,rgba(var(--primary),0.14),transparent_45%)]" />
       <div className="relative h-full w-full">

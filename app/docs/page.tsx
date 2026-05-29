@@ -192,26 +192,26 @@ function DataPacket({ delay = 0 }: { delay?: number }) {
 
 export function NetworkFlowDiagram() {
   const phaseLabel = 'WebSocket Signaling: A → Server → B';
-
+ 
   return (
-    <div className="relative w-full rounded-2xl border border-border/50 bg-card/30 p-6">
-      <div className="relative flex h-42 items-center justify-between gap-4 px-2 md:px-6">
+    <div className="relative w-full rounded-2xl border border-border/50 bg-card/30 p-6 pb-12 md:pb-6">
+      <div className="relative flex flex-col md:flex-row h-auto md:h-42 items-center justify-between gap-8 md:gap-4 px-2 md:px-6 py-4 md:py-0">
         <EndpointNode label="Client A" active />
         <ServerNode active />
         <EndpointNode label="Client B" active />
-
-        <div className="pointer-events-none absolute left-[17%] top-1/2 h-px w-[26%] -translate-y-1/2">
+ 
+        <div className="pointer-events-none absolute left-[17%] top-1/2 h-px w-[26%] -translate-y-1/2 hidden md:block">
           <DottedPath />
           <DataPacket delay={0} />
         </div>
-
-        <div className="pointer-events-none absolute right-[17%] top-1/2 h-px w-[26%] -translate-y-1/2">
+ 
+        <div className="pointer-events-none absolute right-[17%] top-1/2 h-px w-[26%] -translate-y-1/2 hidden md:block">
           <DottedPath />
           <DataPacket delay={1.15} />
         </div>
       </div>
-
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs font-mono uppercase tracking-widest text-muted-foreground">
+ 
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs font-mono uppercase tracking-widest text-muted-foreground text-center w-full px-4">
         {phaseLabel}
       </div>
     </div>

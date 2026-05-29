@@ -14,7 +14,17 @@ export function NearbyPeers({ onPeerClick }: NearbyPeersProps) {
   return (
     <div className="flex flex-col h-full rounded-2xl border border-border/20 bg-background/20 backdrop-blur-xl shadow-[0_0_10px_rgba(0,0,0,0.1)] overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border/10 bg-background/40">
-        <h3 className="text-xs font-bold tracking-widest uppercase text-foreground/90">Active Nodes</h3>
+        <div className="flex items-center gap-2">
+          <div className="relative flex h-2 w-2 items-center justify-center">
+            <motion.div
+              className="absolute h-full w-full rounded-full bg-primary/60"
+              animate={{ scale: [1, 2.5, 1], opacity: [0.6, 0, 0.6] }}
+              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+            />
+            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+          </div>
+          <h3 className="text-xs font-bold tracking-widest uppercase text-foreground/90">Active Nodes</h3>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
             {nearbyPeers.length} ACTIVE {nearbyPeers.length === 1 ? 'SIGNAL' : 'SIGNALS'}
@@ -30,10 +40,10 @@ export function NearbyPeers({ onPeerClick }: NearbyPeersProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center h-full gap-4 py-12 text-center"
+              className="flex flex-col items-center justify-center h-full gap-5 py-12 text-center"
             >
-              {/* Radar animation */}
-              <div className="relative h-12 w-12">
+              {/* Radar animation with gradient ring */}
+              <div className="relative h-16 w-16">
                 <motion.div
                   className="absolute inset-0 rounded-full border border-primary/30"
                   animate={{ scale: [1, 2.5], opacity: [0.8, 0] }}
@@ -44,13 +54,24 @@ export function NearbyPeers({ onPeerClick }: NearbyPeersProps) {
                   animate={{ scale: [1, 2.5], opacity: [0.8, 0] }}
                   transition={{ repeat: Infinity, duration: 1.5, ease: 'easeOut', delay: 0.75 }}
                 />
+                {/* Gradient glow ring */}
+                <motion.div
+                  className="absolute -inset-2 rounded-full bg-gradient-to-r from-primary/10 via-primary/20 to-primary/10 blur-md"
+                  animate={{ opacity: [0.3, 0.6, 0.3], scale: [0.95, 1.05, 0.95] }}
+                  transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+                />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.8)]" />
+                  <div className="h-2.5 w-2.5 rounded-full bg-primary shadow-[0_0_12px_rgba(var(--primary),0.8)]" />
                 </div>
               </div>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                Scanning local network...
-              </p>
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                  Scanning local network...
+                </p>
+                <p className="text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wider px-4">
+                  Devices on the same network will appear here
+                </p>
+              </div>
             </motion.div>
           ) : (
             <motion.div
@@ -75,7 +96,7 @@ export function NearbyPeers({ onPeerClick }: NearbyPeersProps) {
                       damping: 25,
                     }}
                     onClick={() => onPeerClick?.(peer)}
-                    className="group relative flex items-center gap-3 rounded-xl border border-border/10 bg-card/30 px-4 py-3 text-left transition-all hover:bg-primary/5 hover:border-primary/30 hover:shadow-[0_0_15px_rgba(var(--primary),0.15)]"
+                    className="group relative flex items-center gap-3 rounded-xl border border-border/10 border-l-2 border-l-primary/30 bg-card/30 px-4 py-3 text-left transition-all hover:bg-primary/5 hover:border-primary/30 hover:border-l-primary/60 hover:shadow-[0_0_15px_rgba(var(--primary),0.15)]"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >

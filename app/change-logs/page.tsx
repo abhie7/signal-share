@@ -1,5 +1,8 @@
 import { AppShell } from '@/components/share/app-shell';
 import { Badge } from '@/components/ui/badge';
+import Link from 'next/link';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { ArrowLeft02Icon as ArrowLeftIcon } from '@hugeicons/core-free-icons';
 
 export const metadata = {
   title: 'Changelogs | SignalShare',
@@ -272,52 +275,54 @@ const typeStyles: Record<string, string> = {
 export default function ChangelogPage() {
   return (
     <AppShell>
-      <main className="max-w-4xl mx-auto px-4 py-16">
-
+      <div className="w-full max-w-4xl mx-auto px-6 pt-32 pb-24 flex flex-col gap-12">
+        <Link href="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors font-mono text-xs uppercase tracking-widest w-fit">
+          <HugeiconsIcon icon={ArrowLeftIcon} className="w-4 h-4" />
+          Back to Scanner
+        </Link>
+ 
         {/* Header */}
-        <header className="mb-16 space-y-4">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-tight">
-              Changelogs
-            </h1>
-            <p className="text-muted-foreground mt-2 text-sm">
-              App updates, improvements, and fixes.
-            </p>
-          </div>
+        <header className="space-y-4 border-b border-border/10 pb-6">
+          <h1 className="text-4xl font-bold tracking-widest uppercase text-foreground">
+            Changelogs
+          </h1>
+          <p className="text-muted-foreground text-sm font-mono leading-relaxed">
+            App updates, improvements, and fixes.
+          </p>
         </header>
-
+ 
         {/* Logs */}
         <section className="space-y-20">
           {changelogs.map((log) => (
             <article key={log.version} className="space-y-8">
-
+ 
               {/* Version Block */}
-              <div className="border-b pb-4">
-                <h2 className="text-2xl font-semibold">
+              <div className="border-b border-border/10 pb-4">
+                <h2 className="text-2xl font-bold tracking-widest uppercase text-foreground/90">
                   {log.version}
                 </h2>
-                <time className="text-sm text-muted-foreground">
+                <time className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
                   {log.date}
                 </time>
               </div>
-
+ 
               {/* Change List */}
               <ul className="space-y-6">
                 {log.changes.map((change, index) => (
                   <li key={index} className="space-y-1">
-
+ 
                     <div className="flex items-center gap-3">
                       <Badge
                         className={`text-xs font-medium uppercase tracking-wide ${typeStyles[change.type]}`}
                       >
                         {change.type}
                       </Badge>
-                      <h3 className="text-base font-medium">
+                      <h3 className="text-base font-semibold text-foreground/80 uppercase tracking-wide">
                         {change.title}
                       </h3>
                     </div>
-
-                    <p className="text-sm text-muted-foreground leading-relaxed">
+ 
+                    <p className="text-sm font-mono text-muted-foreground leading-relaxed pl-1">
                       {change.description}
                     </p>
                   </li>
@@ -326,7 +331,7 @@ export default function ChangelogPage() {
             </article>
           ))}
         </section>
-      </main>
+      </div>
     </AppShell>
   );
 }
