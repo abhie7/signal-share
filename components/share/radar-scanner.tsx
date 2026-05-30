@@ -1,15 +1,15 @@
 'use client';
- 
+
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { usePeersStore } from '@/lib/stores/peers-store';
 import { processDataTransfer } from '@/lib/utils/zip';
- 
+
 interface RadarScannerProps {
   onFilesSelected: (files: File[]) => void;
 }
- 
+
 export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -35,19 +35,19 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
     observer.observe(radarRef.current);
     return () => observer.disconnect();
   }, []);
- 
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(true);
   }, []);
- 
+
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
   }, []);
- 
+
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
       e.preventDefault();
@@ -67,7 +67,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
     },
     [onFilesSelected],
   );
- 
+
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
@@ -78,9 +78,9 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
     },
     [onFilesSelected],
   );
- 
+
   const isIdle = status === 'idle';
- 
+
   return (
     <div className="relative flex items-center justify-center w-full h-full min-h-[350px] sm:min-h-[450px] lg:min-h-[550px]">
       <input
@@ -90,7 +90,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
         ref={inputRef}
         onChange={handleFileInput}
       />
- 
+
       <motion.div
         ref={radarRef}
         onDragOver={handleDragOver}
@@ -107,13 +107,13 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
         <div className="absolute inset-[10%] rounded-full border border-primary/10" />
         <div className="absolute inset-[25%] rounded-full border border-primary/10" />
         <div className="absolute inset-[40%] rounded-full border border-primary/10" />
- 
+
         {/* Grid Lines */}
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-full h-px bg-primary/10" />
           <div className="absolute h-full w-px bg-primary/10" />
         </div>
- 
+
         {/* Sweep Beam effect */}
         <motion.div
           className="absolute inset-0 rounded-full overflow-hidden"
@@ -134,7 +134,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
             }}
           />
         </motion.div>
- 
+
         {/* Center Glow with pulsing ring */}
         <div className={`absolute w-32 h-32 rounded-full bg-primary/10 blur-2xl transition-all duration-500 ${isDragOver ? 'scale-150 bg-primary/30' : ''}`} />
         <motion.div
@@ -142,7 +142,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
           animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.6, 0.3] }}
           transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
         />
- 
+
         {/* Center Content */}
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10 pointer-events-none p-6">
           <AnimatePresence mode="wait">
@@ -192,47 +192,46 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
             )}
           </AnimatePresence>
         </div>
- 
+
         {/* Nearby Devices Dots */}
-        <div className="absolute inset-0 pointer-events-none">
-          <AnimatePresence>
-            {peers.map((peer, index) => {
-              const angle = (index * 137.5) % 360; // Golden angle for distribution
-              const minRadius = Math.max(50, radarWidth * 0.18 + 25);
-              const maxRadius = Math.max(100, radarWidth * 0.43);
-   
-              // Generate a deterministic but seemingly random radius
-              const hash = peer.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-              const radius = minRadius + (hash % (maxRadius - minRadius));
-   
-              const x = Math.cos((angle * Math.PI) / 180) * radius;
-              const y = Math.sin((angle * Math.PI) / 180) * radius;
-   
-              return (
+        <AnimatePresence>
+          {peers.map((peer, index) => {
+            // Calculate random position on the radar, avoid inner circle
+            const angle = (index * 137.5) % 360; // Golden angle for distribution
+            const minRadius = 150; // Keep outside text
+            const maxRadius = 240; // Keep inside max width (which max width is 550/2 = ~275, minus padding)
+
+            // Generate a deterministic but seemingly random radius
+            const hash = peer.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            const radius = minRadius + (hash % (maxRadius - minRadius));
+
+            const x = Math.cos((angle * Math.PI) / 180) * radius;
+            const y = Math.sin((angle * Math.PI) / 180) * radius;
+
+            return (
+              <motion.div
+                key={peer.id}
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0 }}
+                className="absolute w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.8)] pointer-events-none"
+                style={{
+                  x,
+                  y,
+                }}
+              >
                 <motion.div
-                  key={peer.id}
-                  initial={{ opacity: 0, scale: 0 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0 }}
-                  className="absolute left-1/2 top-1/2 -ml-[5px] -mt-[5px] sm:-ml-[6px] sm:-mt-[6px] w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.8)] pointer-events-auto"
-                  style={{
-                    x,
-                    y,
-                  }}
-                >
-                  <motion.div
-                    className="absolute inset-0 rounded-full border border-primary"
-                    animate={{ scale: [1, 3], opacity: [0.8, 0] }}
-                    transition={{ repeat: Infinity, duration: 2, delay: index * 0.5 }}
-                  />
-                  <div className="absolute top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] sm:text-[10px] font-mono text-primary/80 uppercase tracking-wider bg-background/60 px-1 py-0.5 rounded backdrop-blur-xs">
-                    {peer.name}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
+                  className="absolute inset-0 rounded-full border border-primary"
+                  animate={{ scale: [1, 3], opacity: [0.8, 0] }}
+                  transition={{ repeat: Infinity, duration: 2, delay: index * 0.5 }}
+                />
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-mono text-primary/80 uppercase tracking-wider">
+                  {peer.name}
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </motion.div>
     </div>
   );
