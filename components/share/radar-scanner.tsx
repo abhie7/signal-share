@@ -190,7 +190,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
                 initial={{ opacity: 0, scale: 0 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0 }}
-                className="absolute w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.8)]"
+                className="absolute w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.8)] pointer-events-none"
                 style={{
                   x,
                   y,
