@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { usePeersStore } from '@/lib/stores/peers-store';
 import { processDataTransfer } from '@/lib/utils/zip';
@@ -14,8 +14,21 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const radarRef = useRef<HTMLDivElement>(null);
+  const [radarWidth, setRadarWidth] = useState<number | null>(null);
   const peers = usePeersStore((s) => s.nearbyPeers);
   const status = useTransferStore((s) => s.status);
+
+  useEffect(() => {
+    const element = radarRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setRadarWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -74,6 +87,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
 
       {/* Radar Container */}
       <motion.div
+        ref={radarRef}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -171,11 +185,11 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
 
         {/* Nearby Devices Dots */}
         <AnimatePresence>
-          {peers.map((peer, index) => {
+          {radarWidth !== null && peers.map((peer, index) => {
             // Calculate random position on the radar, avoid inner circle
             const angle = (index * 137.5) % 360; // Golden angle for distribution
-            const minRadius = 150; // Keep outside text
-            const maxRadius = 240; // Keep inside max width (which max width is 550/2 = ~275, minus padding)
+            const minRadius = Math.max(Math.min(radarWidth * 0.27, 150), 90); // Keep outside text
+            const maxRadius = Math.max(Math.min(radarWidth * 0.44, 240), minRadius + 10); // Keep inside bounds
 
             // Generate a deterministic but seemingly random radius
             const hash = peer.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
