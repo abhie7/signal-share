@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTransferStore } from '@/lib/stores/transfer-store';
 import { usePeersStore } from '@/lib/stores/peers-store';
 import { processDataTransfer } from '@/lib/utils/zip';
@@ -14,8 +14,21 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const radarRef = useRef<HTMLDivElement>(null);
+  const [radarWidth, setRadarWidth] = useState<number | null>(null);
   const peers = usePeersStore((s) => s.nearbyPeers);
   const status = useTransferStore((s) => s.status);
+
+  useEffect(() => {
+    const element = radarRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setRadarWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -63,7 +76,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
   const isIdle = status === 'idle';
 
   return (
-    <div className="relative flex items-center justify-center w-full h-full min-h-150">
+    <div className="relative flex items-center justify-center w-full h-full min-h-[350px] sm:min-h-[450px] lg:min-h-[550px]">
       <input
         type="file"
         multiple
@@ -72,13 +85,13 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
         onChange={handleFileInput}
       />
 
-      {/* Radar Container */}
       <motion.div
+        ref={radarRef}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => isIdle && inputRef.current?.click()}
-        className={`relative flex items-center justify-center w-[min(550px,90vw)] h-[min(550px,90vw)] rounded-full cursor-pointer transition-all duration-500 ${isDragOver ? 'scale-105' : ''
+        className={`relative flex items-center justify-center w-full max-w-[550px] aspect-square rounded-full cursor-pointer transition-all duration-500 ${isDragOver ? 'scale-105' : ''
           }`}
         whileHover={isIdle ? { scale: 1.02 } : {}}
         whileTap={isIdle ? { scale: 0.98 } : {}}
@@ -116,11 +129,16 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
           />
         </motion.div>
 
-        {/* Center Glow */}
+        {/* Center Glow with pulsing ring */}
         <div className={`absolute w-32 h-32 rounded-full bg-primary/10 blur-2xl transition-all duration-500 ${isDragOver ? 'scale-150 bg-primary/30' : ''}`} />
+        <motion.div
+          className="absolute w-44 h-44 sm:w-52 sm:h-52 rounded-full border border-primary/10"
+          animate={{ scale: [1, 1.08, 1], opacity: [0.3, 0.6, 0.3] }}
+          transition={{ repeat: Infinity, duration: 4, ease: 'easeInOut' }}
+        />
 
         {/* Center Content */}
-        <div className="absolute flex flex-col items-center justify-center text-center z-10 pointer-events-none">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10 pointer-events-none p-6">
           <AnimatePresence mode="wait">
             {isDragOver ? (
               <motion.div
@@ -130,7 +148,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
                 exit={{ opacity: 0, scale: 0.8 }}
                 className="flex flex-col items-center"
               >
-                <span className="text-primary font-bold tracking-widest uppercase text-lg drop-shadow-[0_0_8px_rgba(var(--primary),0.8)]">
+                <span className="text-primary font-bold tracking-widest uppercase text-base sm:text-lg drop-shadow-[0_0_8px_rgba(var(--primary),0.8)]">
                   Release to transmit
                 </span>
               </motion.div>
@@ -142,8 +160,8 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
                 exit={{ opacity: 0, scale: 0.8 }}
                 className="flex flex-col items-center gap-2"
               >
-                <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin mb-2" />
-                <span className="text-primary font-bold tracking-widest uppercase text-sm drop-shadow-[0_0_8px_rgba(var(--primary),0.8)]">
+                <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin mb-2" />
+                <span className="text-primary font-bold tracking-widest uppercase text-xs sm:text-sm drop-shadow-[0_0_8px_rgba(var(--primary),0.8)]">
                   Zipping contents...
                 </span>
               </motion.div>
@@ -155,13 +173,13 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
                 exit={{ opacity: 0, scale: 0.8 }}
                 className="flex flex-col items-center gap-2"
               >
-                <span className="text-foreground/90 font-bold tracking-widest uppercase text-sm">
+                <span className="text-foreground/90 font-bold tracking-widest uppercase text-xs sm:text-sm lg:text-base px-4">
                   Drop files/folders here to initiate transmission
                 </span>
-                <span className="text-muted-foreground text-xs font-mono uppercase tracking-wider">
+                <span className="text-muted-foreground text-[10px] sm:text-xs font-mono uppercase tracking-wider px-2">
                   Click to select files (you can drag n drop folders)
                 </span>
-                <span className="text-muted-foreground/80 text-[10px] font-mono uppercase tracking-wider">
+                <span className="text-muted-foreground/80 text-[8px] sm:text-[10px] font-mono uppercase tracking-wider px-2 hidden xs:inline-block">
                   Tip: Copy files and press Ctrl+V anywhere on this page
                 </span>
               </motion.div>
@@ -171,11 +189,11 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
 
         {/* Nearby Devices Dots */}
         <AnimatePresence>
-          {peers.map((peer, index) => {
+          {radarWidth !== null && peers.map((peer, index) => {
             // Calculate random position on the radar, avoid inner circle
             const angle = (index * 137.5) % 360; // Golden angle for distribution
-            const minRadius = 150; // Keep outside text
-            const maxRadius = 240; // Keep inside max width (which max width is 550/2 = ~275, minus padding)
+            const minRadius = Math.max(Math.min(radarWidth * 0.27, 150), 90); // Keep outside text
+            const maxRadius = Math.max(Math.min(radarWidth * 0.44, 240), minRadius + 10); // Keep inside bounds
 
             // Generate a deterministic but seemingly random radius
             const hash = peer.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -190,7 +208,7 @@ export function RadarScanner({ onFilesSelected }: RadarScannerProps) {
                 initial={{ opacity: 0, scale: 0 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0 }}
-                className="absolute w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.8)]"
+                className="absolute w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.8)] pointer-events-none"
                 style={{
                   x,
                   y,

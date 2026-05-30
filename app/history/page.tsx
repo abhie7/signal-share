@@ -45,17 +45,22 @@ export default function HistoryPage() {
           Back to Scanner
         </Link>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-primary">
-            <HugeiconsIcon icon={HistoryIcon} className="w-8 h-8" />
-            <h1 className="text-3xl font-bold tracking-widest uppercase text-foreground">Transfer History</h1>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 text-primary">
+              <HugeiconsIcon icon={HistoryIcon} className="w-8 h-8" />
+              <h1 className="text-3xl font-bold tracking-widest uppercase text-foreground">Transfer History</h1>
+            </div>
+            {history.length > 0 && (
+              <Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10 font-mono text-xs uppercase tracking-widest" onClick={clearHistory}>
+                <HugeiconsIcon icon={TrashIcon} className="w-4 h-4 mr-2" />
+                Clear
+              </Button>
+            )}
           </div>
-          {history.length > 0 && (
-            <Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10 font-mono text-xs uppercase tracking-widest" onClick={clearHistory}>
-              <HugeiconsIcon icon={TrashIcon} className="w-4 h-4 mr-2" />
-              Clear
-            </Button>
-          )}
+          <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider pl-11">
+            All past file, text, and screen share sessions on this device
+          </p>
         </div>
 
         {loading ? (
@@ -63,9 +68,13 @@ export default function HistoryPage() {
             <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
           </div>
         ) : history.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 bg-card/10 border border-primary/10 rounded-3xl p-8 backdrop-blur-md">
-            <HugeiconsIcon icon={HistoryIcon} className="w-12 h-12 text-muted-foreground/30 mb-4" />
+          <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-border/30 rounded-3xl p-8 bg-card/5 backdrop-blur-sm">
+            <div className="relative mb-6">
+              <div className="absolute -inset-4 rounded-full bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 blur-md" />
+              <HugeiconsIcon icon={HistoryIcon} className="relative w-14 h-14 text-muted-foreground/20" />
+            </div>
             <p className="text-sm font-mono text-muted-foreground uppercase tracking-wider text-center">No past transfers found on this device.</p>
+            <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-wider text-center mt-2">Transfers will appear here after completion</p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">

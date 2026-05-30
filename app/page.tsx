@@ -150,19 +150,22 @@ function HomeView() {
       animate="animate"
       exit="exit"
       transition={{ duration: 0.4 }}
-      className="relative w-full min-h-screen pt-20 pb-8 px-3 sm:px-6"
+      className="relative w-full min-h-screen pt-24 pb-8 px-3 sm:px-6"
     >
       <ShareTypeNav
         activeType={shareType}
         onSelect={(type) => setShareType(type)}
         compact
-        className="sticky top-20 z-40 mb-4 rounded-2xl border border-border/40 bg-background/70 p-2 backdrop-blur-xl lg:hidden"
+        className="sticky top-24 z-40 mb-4 rounded-2xl border border-border/40 bg-background/40 p-2 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.15)] lg:hidden"
       />
 
       <div className="mx-auto grid w-full max-w-[1800px] gap-4 lg:grid-cols-[18rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_24rem]">
         <aside className="hidden lg:block">
-          <div className="sticky top-20 space-y-3 rounded-3xl border border-border/50 bg-card/25 p-4 backdrop-blur-xl">
-            <p className="px-2 text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground">Share or Receive</p>
+          <div className="sticky top-20 space-y-3 rounded-3xl border border-border/50 bg-card/25 p-4 backdrop-blur-xl transition-all duration-300">
+            <p className="px-2 text-[10px] font-mono uppercase tracking-[0.22em] text-muted-foreground flex items-center gap-2">
+              <span className="inline-block h-1 w-1 rounded-full bg-primary animate-pulse" />
+              Share or Receive
+            </p>
             <ShareTypeNav
               activeType={shareType}
               onSelect={(type) => setShareType(type)}

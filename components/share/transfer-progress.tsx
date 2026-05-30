@@ -38,7 +38,7 @@ export function TransferProgress() {
   return (
     <div className="flex flex-col items-center justify-center w-full h-full gap-12">
       {/* Circular Progress Ring */}
-      <div className="relative flex items-center justify-center w-[400px] h-[400px]">
+      <div className="relative flex items-center justify-center w-[260px] h-[260px] xs:w-[280px] xs:h-[280px] sm:w-[340px] sm:h-[340px] md:w-[400px] md:h-[400px]">
         {/* Background Ring */}
         <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 400 400">
           <circle
@@ -71,20 +71,20 @@ export function TransferProgress() {
             </linearGradient>
           </defs>
         </svg>
-
+ 
         {/* Center Content */}
-        <div className="absolute flex flex-col items-center justify-center text-center">
+        <div className="absolute flex flex-col items-center justify-center text-center p-4">
           <motion.span
-            className="text-6xl font-bold tracking-tighter text-foreground drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]"
+            className="text-4xl xs:text-5xl md:text-6xl font-bold tracking-tighter text-foreground drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]"
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
           >
             {Math.round(percentage)}%
           </motion.span>
-          <span className="text-sm font-mono text-primary/80 uppercase tracking-widest mt-2">
+          <span className="text-[9px] sm:text-xs md:text-sm font-mono text-primary/80 uppercase tracking-widest mt-1 sm:mt-2 px-2">
             {status === 'complete' ? 'TRANSMISSION COMPLETE' : 'TRANSMITTING'}
           </span>
-
+ 
           {status === 'complete' && (
             <motion.div
               className="absolute inset-0 rounded-full bg-emerald-500/20"
@@ -93,11 +93,11 @@ export function TransferProgress() {
               transition={{ duration: 1, ease: "easeOut" }}
             />
           )}
-
+ 
           {showRelayOption && (
             <motion.button
               onClick={forceRelay}
-              className="mt-6 px-4 py-2 rounded-full bg-primary/20 hover:bg-primary/30 text-[10px] font-bold text-primary border border-primary/30 backdrop-blur-sm transition-colors"
+              className="mt-3 sm:mt-6 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-primary/20 hover:bg-primary/30 text-[8px] sm:text-[10px] font-bold text-primary border border-primary/30 backdrop-blur-sm transition-colors"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
             >

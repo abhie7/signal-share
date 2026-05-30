@@ -27,22 +27,22 @@ export function ShareTypeNav({ activeType, onSelect, className = '', compact = f
     return (
       <div className={className} aria-label="Share and receive options">
         <div className="flex items-center gap-2 rounded-xl border border-border/10 bg-background/20 p-1">
-          <Select 
-            value={isSharing ? activeType : 'placeholder'} 
+          <Select
+            value={isSharing ? activeType : 'placeholder'}
             onValueChange={(value) => onSelect(value as ShareType)}
           >
-            <SelectTrigger className="h-10 flex-1 rounded-lg border-transparent bg-background/50 px-3 text-left text-[10px] font-bold uppercase tracking-widest text-foreground/80 transition-colors hover:bg-background/80">
+            <SelectTrigger className="h-12! flex-1 rounded-lg border-1 border-primary bg-background/50 px-4 text-left text-xs font-bold uppercase tracking-widest text-foreground/80 transition-colors hover:bg-background/80">
               <SelectValue placeholder="Select Share Type">
                 {isSharing ? ITEMS.find(i => i.type === activeType)?.label : "Choose Share Type"}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent align="start" className="min-w-48 bg-popover/95 backdrop-blur-md">
+            <SelectContent position="popper" align="start" className="w-[var(--radix-select-trigger-width)] bg-popover/95 border-primary border-1 backdrop-blur-md">
               <SelectItem value="placeholder" className="hidden">Choose Share Type</SelectItem>
               {ITEMS.map((item) => {
                 return (
-                  <SelectItem key={item.type} value={item.type} className="text-xs font-medium uppercase tracking-wider">
-                    <span className="flex items-center gap-2">
-                      <HugeiconsIcon icon={item.icon} className="h-3.5 w-3.5 opacity-60" />
+                  <SelectItem key={item.type} value={item.type} className="text-xs sm:text-sm font-semibold uppercase tracking-wider py-3 px-4 cursor-pointer">
+                    <span className="flex items-center gap-2.5">
+                      <HugeiconsIcon icon={item.icon} className="h-4 w-4 opacity-70" />
                       {item.label}
                     </span>
                   </SelectItem>
@@ -55,13 +55,12 @@ export function ShareTypeNav({ activeType, onSelect, className = '', compact = f
             type="button"
             variant={activeType === 'receive' ? 'default' : 'ghost'}
             onClick={() => onSelect('receive')}
-            className={`h-10 shrink-0 rounded-lg px-3.5 text-[10px] font-bold uppercase tracking-widest transition-all ${
-              activeType === 'receive' 
-                ? 'bg-primary text-primary-foreground shadow-[0_0_12px_rgba(var(--primary),0.3)]' 
-                : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
-            }`}
+            className={`h-12! shrink-0 rounded-lg px-4 text-xs font-bold uppercase tracking-widest transition-all ${activeType === 'receive'
+              ? 'bg-primary  text-primary-foreground shadow-[0_0_12px_rgba(var(--primary),0.3)]'
+              : 'text-muted-foreground border-primary border-1 hover:bg-background/60 hover:text-foreground'
+              }`}
           >
-            <HugeiconsIcon icon={Link04Icon} className="mr-1.5 h-3.5 w-3.5" />
+            <HugeiconsIcon icon={Link04Icon} className="mr-1.5 h-4 w-4" />
             Join
           </Button>
         </div>
@@ -86,15 +85,14 @@ export function ShareTypeNav({ activeType, onSelect, className = '', compact = f
                   key={item.type}
                   type="button"
                   onClick={() => onSelect(item.type)}
-                  className={`w-full h-11 justify-start gap-3 rounded-xl px-3 text-left transition-all duration-200 border ${
-                    isActive
-                      ? 'border-primary/50 bg-primary/10 text-primary shadow-[0_0_16px_rgba(var(--primary),0.08)]'
-                      : 'border-transparent bg-transparent text-foreground/70 hover:bg-white/5 hover:text-foreground'
-                  }`}
+                  className={`w-full h-11 justify-start gap-3 rounded-xl px-3 text-left transition-all duration-200 border ${isActive
+                    ? 'border-primary/50 bg-primary/10 text-primary shadow-[0_0_16px_rgba(var(--primary),0.08)]'
+                    : 'border-transparent bg-transparent text-foreground/70 hover:bg-white/5 hover:text-foreground'
+                    }`}
                 >
                   <HugeiconsIcon icon={item.icon} className={`h-4 w-4 shrink-0 ${isActive ? 'text-primary' : 'opacity-50'}`} />
                   <span className="text-xs font-semibold uppercase tracking-wider">{item.label}</span>
-                  
+
                   {isActive && (
                     <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                   )}
@@ -114,11 +112,10 @@ export function ShareTypeNav({ activeType, onSelect, className = '', compact = f
           <Button
             type="button"
             onClick={() => onSelect('receive')}
-            className={`w-full justify-start gap-3 rounded-xl border p-3 h-auto text-left transition-all duration-200 ${
-              activeType === 'receive'
-                ? 'border-primary bg-primary/10 text-primary shadow-[0_0_16px_rgba(var(--primary),0.08)]'
-                : 'border-border/30 bg-background/30 text-foreground hover:bg-white/5'
-            }`}
+            className={`w-full justify-start gap-3 rounded-xl border p-3 h-auto text-left transition-all duration-200 ${activeType === 'receive'
+              ? 'border-primary bg-primary/10 text-primary shadow-[0_0_16px_rgba(var(--primary),0.08)]'
+              : 'border-border/30 bg-background/30 text-foreground hover:bg-white/5'
+              }`}
           >
             <div className={`p-2 rounded-lg ${activeType === 'receive' ? 'bg-primary/20' : 'bg-muted/40'}`}>
               {/* Swapped out broken Link2 for Link04Icon */}
