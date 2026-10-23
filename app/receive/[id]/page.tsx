@@ -1,272 +1,233 @@
-'use client';
+"use client"
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { AppShell } from '@/components/share/app-shell';
-import { TransferProgress } from '@/components/share/transfer-progress';
-import { DeviceAvatar } from '@/components/share/device-avatar';
-import { Button } from '@/components/ui/button';
-import { useTransfer } from '@/hooks/use-transfer';
-import { useTransferStore } from '@/lib/stores/transfer-store';
-import { useAppStore } from '@/lib/stores/app-store';
-import { formatBytes } from '@/lib/webrtc/file-chunker';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { Alert01Icon, SecurityLockIcon } from '@hugeicons/core-free-icons';
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useParams } from "next/navigation"
+import {
+  Alert02Icon,
+  ComputerScreenShareIcon,
+  File01Icon,
+  TextIcon,
+} from "@hugeicons/core-free-icons"
+import { AppShell } from "@/components/app-shell"
+import { SessionView } from "@/components/session-view"
+import { Icon } from "@/components/icon"
+import { Btn, Spinner } from "@/components/ui-kit"
+import { Avatar, Glass } from "@/components/brand"
+import { join } from "@/lib/controller"
+import { useConnection, useShare } from "@/lib/store"
+import { safeStorage } from "@/lib/signaling"
+import type { SessionPreview } from "@/lib/protocol"
+import { formatBytes } from "@/lib/utils"
+import { useClientValue } from "@/lib/use-client-value"
 
-interface SessionInfo {
-  id: string;
-  code: string;
-  transferType: 'file' | 'text';
-  senderName: string;
-  files: Array<{ name: string; size: number; type: string }>;
-  totalSize: number;
-  status: string;
-}
+type Load =
+  | { state: "loading" }
+  | { state: "ready"; preview: SessionPreview }
+  | { state: "error"; title: string; detail: string }
 
 export default function ReceivePage() {
-  const params = useParams();
-  const sessionId = params.id as string;
-  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [joined, setJoined] = useState(false);
+  const { id } = useParams<{ id: string }>()
+  const idle = useShare((s) => s.phase === "idle")
+  const online = useConnection((s) => s.status === "online")
+  const [load, setLoad] = useState<Load>({ state: "loading" })
+  const resumable = useClientValue(
+    () =>
+      Boolean(
+        safeStorage(() => sessionStorage.getItem(`signalshare-seat:${id}`)),
+      ),
+    false,
+  )
 
-  const { joinByLink } = useTransfer();
-  const status = useTransferStore((s) => s.status);
-  const isConnected = useAppStore((s) => s.isConnected);
-
-  // Fetch session info
   useEffect(() => {
-    async function fetchSession() {
-      try {
-        const res = await fetch(`/api/transfer/${sessionId}`);
-        if (!res.ok) {
-          setError('This transfer link is invalid or has expired.');
-          setLoading(false);
-          return;
-        }
-        const data = await res.json();
-        setSessionInfo(data);
-      } catch {
-        setError('Failed to load transfer info.');
-      }
-      setLoading(false);
+    let live = true
+    fetch(`/api/sessions/${encodeURIComponent(id)}`)
+      .then(async (res) => {
+        if (!live) return
+        if (res.ok)
+          return setLoad({ state: "ready", preview: await res.json() })
+        if (res.status === 429)
+          return setLoad({
+            state: "error",
+            title: "Too many requests",
+            detail: "Wait a moment and reload the page.",
+          })
+        setLoad({
+          state: "error",
+          title: "This share has ended",
+          detail:
+            "The sender stopped sharing, someone else received it, or the link expired. Ask for a new link.",
+        })
+      })
+      .catch(
+        () =>
+          live &&
+          setLoad({
+            state: "error",
+            title: "Can’t reach SignalShare",
+            detail: "Check your internet connection and reload.",
+          }),
+      )
+    return () => {
+      live = false
     }
+  }, [id])
 
-    fetchSession();
-  }, [sessionId]);
+  // Coming back after a reload: reclaim our seat automatically.
+  useEffect(() => {
+    if (resumable && online && idle && load.state === "ready")
+      void join({ sessionId: id })
+    // Only on first eligibility.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumable, online, load.state])
 
-  const handleAccept = () => {
-    setJoined(true);
-    joinByLink(sessionId);
-  };
-
-  if (loading) {
+  if (!idle)
     return (
       <AppShell>
-        <div className="flex justify-center py-20">
-          <motion.div
-            className="h-10 w-10 rounded-full border-2 border-primary/20 border-t-primary"
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-          />
-        </div>
+        <SessionView />
       </AppShell>
-    );
-  }
-
-  if (error) {
-    return (
-      <AppShell>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center space-y-4 py-20 flex flex-col items-center"
-        >
-          <HugeiconsIcon icon={Alert01Icon} className="w-10 h-10 text-destructive" />
-          <h1 className="text-xl font-bold tracking-widest uppercase text-destructive">{error}</h1>
-          <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-            The sender may have cancelled the transfer, or the link has expired.
-          </p>
-          <Button variant="outline" onClick={() => window.location.href = '/'} className="border-primary/30 text-primary hover:bg-primary/10 font-mono uppercase tracking-widest text-xs">
-            Return to Scanner
-          </Button>
-        </motion.div>
-      </AppShell>
-    );
-  }
-
-  if (!sessionInfo) return null;
+    )
 
   return (
     <AppShell>
-      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md mx-auto space-y-6"
-        >
-          {!joined ? (
-            <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-background/80 backdrop-blur-xl shadow-[0_0_50px_rgba(var(--primary),0.15)]">
-              {/* Ambient glow */}
-              <div className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-primary/20 blur-3xl" />
-
-              <div className="relative p-6 flex flex-col items-center text-center gap-4">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: 'spring', delay: 0.1 }}
-                  className="relative"
-                >
-                  <div className="absolute inset-0 rounded-full border border-primary/50 animate-ping" />
-                  <DeviceAvatar name={sessionInfo.senderName} size="lg" active showTooltip={false} />
-                </motion.div>
-
-                <div className="space-y-1">
-                  <h2 className="text-lg font-bold tracking-widest uppercase text-foreground/90">Incoming Signal</h2>
-                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-                    From <span className="text-primary">{sessionInfo.senderName}</span>
-                  </p>
-                </div>
-
-                <div className="w-full rounded-xl border border-border/20 bg-card/30 p-3 space-y-2">
-                  {sessionInfo.transferType === 'text' ? (
-                    <>
-                      <p className="text-xs font-mono text-foreground/80">Encrypted text message</p>
-                      <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
-                        <span>TEXT PAYLOAD</span>
-                        <span>{sessionInfo.totalSize} CHARS</span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {sessionInfo.files.map((file, i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 + i * 0.05 }}
-                          className="flex items-center justify-between text-xs font-mono"
-                        >
-                          <span className="truncate text-foreground/80 pr-2">{file.name}</span>
-                          <span className="text-primary/80 shrink-0">
-                            {formatBytes(file.size)}
-                          </span>
-                        </motion.div>
-                      ))}
-
-                      <div className="pt-2 mt-2 border-t border-border/20 text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex justify-between">
-                        <span>{sessionInfo.files.length} FILE{sessionInfo.files.length !== 1 ? 'S' : ''}</span>
-                        <span>{formatBytes(sessionInfo.totalSize)} TOTAL</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {!isConnected && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-[10px] font-mono text-amber-500 uppercase tracking-widest"
-                  >
-                    Establishing connection...
-                  </motion.p>
-                )}
-
-                <div className="flex w-full gap-3 mt-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 font-mono uppercase tracking-widest text-xs"
-                    onClick={() => {
-                      window.location.href = '/';
-                    }}
-                  >
-                    Reject
-                  </Button>
-                  <Button
-                    className="flex-1 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/50 font-mono uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(var(--primary),0.2)]"
-                    onClick={handleAccept}
-                    disabled={!isConnected}
-                  >
-                    Accept
-                  </Button>
-                </div>
-
-                {/* E2E Security Badge */}
-                <div className="flex items-center gap-2 mt-2">
-                  <HugeiconsIcon icon={SecurityLockIcon} className="w-3 h-3 text-emerald-400" />
-                  <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest">100% E2E Encrypted</span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-8">
-              <div className="text-center space-y-2">
-                <h1 className="text-2xl font-bold tracking-widest uppercase text-foreground/90">
-                  {status === 'connecting' && 'Establishing Link'}
-                  {status === 'transferring' && (sessionInfo.transferType === 'text' ? 'Receiving Encrypted Text' : 'Receiving Data')}
-                  {status === 'complete' && (sessionInfo.transferType === 'text' ? 'Message Received' : 'Transmission Complete')}
-                  {status === 'error' && 'Transmission Failed'}
-                </h1>
-                <div className="flex items-center justify-center gap-2">
-                  <DeviceAvatar name={sessionInfo.senderName} size="sm" />
-                  <span className="text-sm font-mono text-primary/80 uppercase tracking-wider">
-                    From {sessionInfo.senderName}
-                  </span>
-                </div>
-              </div>
-
-              {status === 'connecting' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="relative flex items-center justify-center w-64 h-64 mx-auto"
-                >
-                  <div className="absolute inset-0 rounded-full border border-primary/20" />
-                  <motion.div
-                    className="absolute inset-0 rounded-full border-2 border-primary"
-                    style={{ clipPath: 'polygon(50% 50%, 100% 0, 100% 100%)' }}
-                    animate={{ rotate: -360 }}
-                    transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                  />
-                  <div className="absolute w-24 h-24 rounded-full bg-primary/20 blur-xl animate-pulse" />
-                  <div className="z-10">
-                    <DeviceAvatar name={sessionInfo.senderName} size="lg" active showTooltip={false} />
-                  </div>
-                </motion.div>
-              )}
-
-              {sessionInfo.transferType === 'file' && (status === 'transferring' || status === 'complete') && <TransferProgress />}
-
-              {sessionInfo.transferType === 'text' && status === 'transferring' && (
-                <div className="rounded-2xl border border-primary/20 bg-card/20 px-6 py-4 text-xs font-mono uppercase tracking-widest text-primary text-center">
-                  Waiting for secure text payload...
-                </div>
-              )}
-
-              <div className="flex justify-center">
-                {status === 'complete' ? (
-                  <Button
-                    onClick={() => window.location.href = '/'}
-                    className="bg-primary/20 text-primary hover:bg-primary/30 border border-primary/50 font-mono uppercase tracking-widest"
-                  >
-                    Done
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    onClick={() => window.location.href = '/'}
-                    className="border-destructive/50 text-destructive hover:bg-destructive/10 font-mono uppercase tracking-widest"
-                  >
-                    Abort
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </motion.div>
+      <div className='mx-auto w-full max-w-md px-4 pb-10 pt-10 sm:pt-16'>
+        {load.state === "loading" && (
+          <div
+            className='flex justify-center py-20 text-muted-foreground'
+            role='status'
+          >
+            <Spinner className='size-6' />{" "}
+            <span className='sr-only'>Loading share</span>
+          </div>
+        )}
+        {load.state === "error" && (
+          <Glass as='section' className='enter p-6 text-center'>
+            <span className='mx-auto grid size-12 place-items-center rounded-full bg-destructive/12 text-destructive'>
+              <Icon icon={Alert02Icon} />
+            </span>
+            <h1 className='title mt-4'>{load.title}</h1>
+            <p className='mt-2 text-sm text-muted-foreground'>{load.detail}</p>
+            <Link
+              href='/'
+              className='pressable mt-6 inline-flex h-10 items-center rounded-full bg-surface-2 px-5 text-sm font-medium'
+            >
+              Go to SignalShare
+            </Link>
+          </Glass>
+        )}
+        {load.state === "ready" && (
+          <Preview
+            id={id}
+            preview={load.preview}
+            online={online}
+            resumable={resumable}
+          />
+        )}
       </div>
     </AppShell>
-  );
+  )
+}
+
+function Preview({
+  id,
+  preview,
+  online,
+  resumable,
+}: {
+  id: string
+  preview: SessionPreview
+  online: boolean
+  resumable: boolean
+}) {
+  const [busy, setBusy] = useState(false)
+  const icon =
+    preview.kind === "screen"
+      ? ComputerScreenShareIcon
+      : preview.kind === "text"
+        ? TextIcon
+        : File01Icon
+  const what =
+    preview.kind === "screen"
+      ? "is sharing their screen"
+      : preview.kind === "text"
+        ? "wants to send you some text"
+        : `wants to send you ${preview.files.length === 1 ? "a file" : `${preview.files.length} files`}`
+  const claimed = !preview.available && !resumable
+
+  return (
+    <Glass
+      as='section'
+      className='enter overflow-hidden'
+      aria-labelledby='preview-title'
+    >
+      <div className='p-6'>
+        <div className='flex items-center gap-3'>
+          <Avatar name={preview.senderName} ring className='size-14' />
+          <div className='min-w-0'>
+            <h1 id='preview-title' className='font-semibold'>
+              {preview.senderName}
+            </h1>
+            <p className='text-sm text-muted-foreground'>{what}</p>
+          </div>
+        </div>
+
+        {preview.kind === "files" && (
+          <ul className='well mt-5 max-h-60 divide-y divide-border overflow-auto rounded-2xl'>
+            {preview.files.map((f, i) => (
+              <li
+                key={i}
+                className='flex items-center gap-3 px-3 py-2.5 text-sm'
+              >
+                <Icon icon={icon} className='size-4 text-muted-foreground' />
+                <span className='min-w-0 flex-1 truncate'>{f.name}</span>
+                <span className='tabular-nums text-muted-foreground'>
+                  {formatBytes(f.size)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {preview.kind !== "files" && (
+          <div className='well mt-5 flex items-center gap-3 rounded-2xl p-4 text-sm'>
+            <Icon icon={icon} className='text-primary' />
+            {preview.kind === "screen"
+              ? "Live screen : view only. Nothing is recorded."
+              : `${formatBytes(preview.totalSize)} of text`}
+          </div>
+        )}
+
+        {claimed && (
+          <p className='mt-4 text-sm text-warning' role='alert'>
+            Another device already received this share. Ask the sender to share
+            again.
+          </p>
+        )}
+      </div>
+      <footer className='flex gap-2 border-t border-border px-6 py-4'>
+        <Link
+          href='/'
+          className='pressable inline-flex h-10 flex-1 items-center justify-center rounded-full text-sm font-medium text-muted-foreground hover:bg-surface-2'
+        >
+          Not now
+        </Link>
+        <Btn
+          variant='primary'
+          className='flex-1'
+          disabled={!online || busy || claimed}
+          onClick={async () => {
+            setBusy(true)
+            await join({ sessionId: id })
+            setBusy(false)
+          }}
+        >
+          {(!online || busy) && <Spinner className='size-3.5' />}
+          {!online
+            ? "Connecting…"
+            : preview.kind === "screen"
+              ? "View screen"
+              : "Receive"}
+        </Btn>
+      </footer>
+    </Glass>
+  )
 }
