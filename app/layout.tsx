@@ -1,45 +1,48 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, DM_Sans } from "next/font/google";
-import NextTopLoader from 'nextjs-toploader';
-import { ThemeProvider } from '@/components/theme-provider';
-import "./globals.css";
+import type { Metadata, Viewport } from "next"
+import { Google_Sans_Code, Google_Sans_Flex } from "next/font/google"
+import { ThemeProvider } from "@/components/theme-provider"
+import "./globals.css"
 
-const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-sans' });
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const sans = Google_Sans_Flex({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+  axes: ["opsz", "wdth", "ROND", "GRAD"],
+  variable: "--font-flex",
+  display: "swap",
+  adjustFontFallback: false,
+})
+const code = Google_Sans_Code({
   subsets: ["latin"],
-});
+  variable: "--font-gcode",
+  display: "swap",
+  adjustFontFallback: false,
+})
 
 export const metadata: Metadata = {
-  title: "SignalShare | Peer-to-Peer File Transfer in Browser | Direct LAN & Relay Sharing",
-  description: "Transmit files instantly using direct peer-to-peer connections over local networks. No accounts, no uploads. Generate temporary relay links when needed.",
-  icons: {
-    icon: '/favicon.svg',
-  },
-};
+  title: "SignalShare | send files, text and your screen to any device",
+  description:
+    "Share files, text and your screen between any two devices. No account. Direct when possible, encrypted relay when not.",
+  icons: { icon: "/favicon.svg" },
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f6f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#17181b" },
+  ],
+}
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={dmSans.variable} suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <ThemeProvider>
-          <NextTopLoader color="#00dbd3" showSpinner={false} />
-          {children}
-        </ThemeProvider>
+    <html
+      lang='en'
+      className={`${sans.variable} ${code.variable}`}
+      suppressHydrationWarning
+    >
+      <body>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
-  );
+  )
 }
-

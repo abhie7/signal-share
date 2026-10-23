@@ -1,66 +1,81 @@
-import { AppShell } from '@/components/share/app-shell';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { ArrowLeft02Icon as ArrowLeftIcon, Shield01Icon as ShieldIcon } from '@hugeicons/core-free-icons';
-import Link from 'next/link';
+import { ContentPage } from "@/components/content-page"
 
 export const metadata = {
-  title: 'Privacy Policy | SignalShare',
-  description: 'Our transparent privacy policy. No tracking, no storage, no accounts.',
-};
+  title: "Privacy : SignalShare",
+  description:
+    "What SignalShare sees, what it keeps, and what it never touches.",
+}
 
 export default function PrivacyPage() {
   return (
-    <AppShell>
-      <div className="w-full max-w-3xl mx-auto px-6 pt-32 pb-24 flex flex-col gap-12">
-        <Link href="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors font-mono text-xs uppercase tracking-widest w-fit">
-          <HugeiconsIcon icon={ArrowLeftIcon} className="w-4 h-4" />
-          Back to Scanner
-        </Link>
-
-        <div>
-          <div className="flex items-center gap-3 mb-4 text-primary">
-            <HugeiconsIcon icon={ShieldIcon} className="w-8 h-8" />
-            <h1 className="text-3xl font-bold tracking-widest uppercase text-foreground">Transparency & Privacy</h1>
-          </div>
-          <p className="font-mono text-sm text-muted-foreground leading-relaxed">
-            SignalShare is a decentralized transmission tool, not a data storage service. Our privacy policy is absolute zero.
-          </p>
-        </div>
-
-        <div className="grid gap-6">
-          <div className="p-6 bg-card/20 border border-primary/20 rounded-xl space-y-4 backdrop-blur-sm">
-            <h2 className="text-lg font-bold tracking-widest uppercase text-foreground">1. Zero User Accounts</h2>
-            <p className="font-mono text-sm text-muted-foreground">
-              We do not ask for emails, passwords, or OAuth logins. Your device identity is generated locally via a random hash.
-            </p>
-          </div>
-
-          <div className="p-6 bg-card/20 border border-primary/20 rounded-xl space-y-4 backdrop-blur-sm">
-            <h2 className="text-lg font-bold tracking-widest uppercase text-foreground">2. Zero Permanent Storage</h2>
-            <p className="font-mono text-sm text-muted-foreground">
-              When transferring via direct LAN mode, files go directly from your machine to the receiver. They never touch our servers. During remote Relay mode, packets stream through our server&apos;s RAM and are immediately obliterated upon download completion.
-            </p>
-          </div>
-
-          <div className="p-6 bg-card/20 border border-primary/20 rounded-xl space-y-4 backdrop-blur-sm">
-            <h2 className="text-lg font-bold tracking-widest uppercase text-foreground">3. Zero Third-Party Analytics</h2>
-            <p className="font-mono text-sm text-muted-foreground">
-              We do not inject Google Analytics, Meta Pixel, or any behavioral tracking scripts into the payload. The network remains pure and untracked.
-            </p>
-          </div>
-
-          <div className="p-6 bg-card/20 border border-primary/20 rounded-xl space-y-4 backdrop-blur-sm">
-            <h2 className="text-lg font-bold tracking-widest uppercase text-foreground">4. Ephemeral Logs</h2>
-            <p className="font-mono text-sm text-muted-foreground">
-              Fastify application server connection logs are rotated hourly. We do not index IP addresses mapped to device hashes.
-            </p>
-          </div>
-        </div>
-
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground/50 text-center mt-12 border-t border-border/10 pt-12">
-          Effective Date: {new Date().getFullYear()}
+    <ContentPage
+      title='Privacy'
+      lead='SignalShare moves data between your devices. It is not a storage service.'
+    >
+      <section>
+        <h2>No accounts</h2>
+        <p>
+          There is nothing to sign up for. Each device gets a random name (you
+          can change it); it is stored only in your browser.
         </p>
-      </div>
-    </AppShell>
-  );
+      </section>
+      <section>
+        <h2>What goes through the server</h2>
+        <ul>
+          <li>
+            The coordination server sees the names, sizes and types of files you
+            offer, so the recipient can preview them. It never sees text you
+            share.
+          </li>
+          <li>
+            Direct connections carry your data device-to-device, encrypted by
+            WebRTC (DTLS). A TURN relay, if one is used, forwards encrypted
+            packets it cannot read.
+          </li>
+          <li>
+            When a direct connection is impossible, data flows through the
+            SignalShare relay. It is encrypted on your device with a key the two
+            devices agree on (ECDH + AES-GCM), so the relay only forwards
+            ciphertext. It is never written to disk.
+          </li>
+        </ul>
+      </section>
+      <section>
+        <h2>What is kept</h2>
+        <ul>
+          <li>
+            Shares live in server memory only, and are deleted when they finish,
+            are cancelled, or expire (30 minutes unused).
+          </li>
+          <li>
+            Server logs record events such as “share created” or “connected via
+            relay” with a random reference : never file contents, text, keys or
+            credentials.
+          </li>
+          <li>
+            Your transfer history (names and sizes, not contents) is stored in
+            your own browser and can be cleared from the History page.
+          </li>
+        </ul>
+      </section>
+      <section>
+        <h2>Who can join a share</h2>
+        <p>
+          Anyone with the link or code can claim a share, and only one device
+          can. Codes are single-use, expire, and guessing is rate-limited : but
+          treat a link like a key and send it only to the person it is meant
+          for.
+        </p>
+      </section>
+      <section>
+        <h2>No tracking</h2>
+        <p>
+          No analytics, advertising or third-party scripts are loaded. Device
+          avatars are images from DiceBear (api.dicebear.com), generated from
+          the random device name : DiceBear sees that name and your IP address
+          when the image loads, and nothing else.
+        </p>
+      </section>
+    </ContentPage>
+  )
 }
