@@ -62,6 +62,13 @@ export default function DocsPage() {
           carry live video.
         </p>
         <p>
+          Every route uses keys only the two devices hold. Share links carry a
+          secret after the <code>#</code> that never reaches the server; whoever
+          opens the link uses it to check the sender before anything arrives.
+          Joined with a code instead? Both screens show the same 4-digit
+          security code: compare it to be sure nobody is in the middle.
+        </p>
+        <p>
           If a connection drops mid-transfer, SignalShare reconnects and resumes
           from the last verified byte. A transfer is marked complete only after
           the recipient has checked every file.

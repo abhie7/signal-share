@@ -9,6 +9,8 @@ import type { PathKind } from "./pipe"
 export class Peer {
   readonly pc: RTCPeerConnection
   private queue: RTCIceCandidateInit[] = []
+  /** Optional rewrite of the remote answer before it is applied (sender-side tuning). */
+  mungeAnswer: ((sdp: string) => string) | null = null
   private closed = false
 
   constructor(
@@ -42,7 +44,12 @@ export class Peer {
   async handle(data: SignalData): Promise<boolean> {
     if (this.closed || data.a !== this.attempt) return false
     if (data.k === "offer" || data.k === "answer") {
-      await this.pc.setRemoteDescription(data.sdp as RTCSessionDescriptionInit)
+      const desc = data.sdp as RTCSessionDescriptionInit
+      await this.pc.setRemoteDescription(
+        data.k === "answer" && this.mungeAnswer && desc.sdp
+          ? { ...desc, sdp: this.mungeAnswer(desc.sdp) }
+          : desc,
+      )
       if (data.k === "offer") {
         await this.pc.setLocalDescription(await this.pc.createAnswer())
         this.signal({ k: "answer", sdp: this.pc.localDescription!.toJSON() })
@@ -138,6 +145,7 @@ export type FailReason =
   | "relay-timeout"
   | "peer-timeout"
   | "webrtc-unsupported"
+  | "auth-failed" // keys or DTLS fingerprints didn't match: someone is in the middle
   | "aborted"
 
 export class PathError extends Error {
@@ -147,4 +155,41 @@ export class PathError extends Error {
   ) {
     super(message ?? reason)
   }
+}
+
+/**
+ * Chrome's bandwidth estimate starts near 300 kbps and ramps slowly, so a fresh screen share
+ * looked soft and juddery for its first seconds. Advertise a higher starting bitrate for every
+ * video codec (Chrome reads x-google-* from the remote description; other browsers ignore it).
+ */
+export function withStartBitrate(sdp: string, kbps: number): string {
+  const lines = sdp.split("\r\n")
+  const video = new Set<string>()
+  let inVideo = false
+  for (const line of lines) {
+    if (line.startsWith("m=")) inVideo = line.startsWith("m=video")
+    const m = inVideo && /^a=rtpmap:(\d+) (VP8|VP9|H264|AV1)\//i.exec(line)
+    if (m) video.add(m[1])
+  }
+  const param = `x-google-start-bitrate=${kbps}`
+  const out: string[] = []
+  const hasFmtp = new Set<string>()
+  for (const line of lines) {
+    const f = /^a=fmtp:(\d+) (.*)$/.exec(line)
+    if (f && video.has(f[1]) && !f[2].includes("x-google-start-bitrate")) {
+      hasFmtp.add(f[1])
+      out.push(`${line};${param}`)
+      continue
+    }
+    out.push(line)
+    const r = /^a=rtpmap:(\d+) /.exec(line)
+    // Codecs without an fmtp line (VP8) get one right after their rtpmap.
+    if (
+      r &&
+      video.has(r[1]) &&
+      !lines.some((l) => l.startsWith(`a=fmtp:${r[1]} `))
+    )
+      out.push(`a=fmtp:${r[1]} ${param}`)
+  }
+  return out.join("\r\n")
 }

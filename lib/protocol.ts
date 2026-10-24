@@ -2,7 +2,9 @@
 // Every frame is JSON. Requests carry an `id`; the server answers with `reply` and `re: id`.
 // Both sides validate everything they receive : never trust the other end.
 
-export const PROTOCOL_VERSION = 2
+import { isDeviceKind, type DeviceKind } from "./device"
+
+export const PROTOCOL_VERSION = 3
 
 export const LIMITS = {
   maxSignalBytes: 64 * 1024,
@@ -11,9 +13,16 @@ export const LIMITS = {
   maxTotalBytes: 50 * 1024 ** 3,
   maxTextBytes: 1024 * 1024,
   maxDeviceName: 40,
+  maxNote: 140,
 } as const
 
 export type ShareKind = "files" | "text" | "screen"
+
+/** What a request link asks for. */
+export type RequestWant = "files" | "screen"
+
+/** How long an unclaimed share may stay open, chosen by the sender. 30 is the default. */
+export const EXPIRY_MINUTES = [10, 30, 60, 1440] as const
 
 export interface FileMeta {
   name: string
@@ -33,7 +42,8 @@ export type ErrorCode =
   | "PEER_NOT_FOUND"
   | "INTERNAL"
 
-export type EndReason = "left" | "peer_failed" | "expired" | "peer_gone"
+export type EndReason =
+  "left" | "peer_failed" | "expired" | "peer_gone" | "declined" // the requester turned down an answer to their request
 
 export interface IceServer {
   urls: string | string[]
@@ -51,13 +61,23 @@ export interface Welcome {
   relay: boolean
   turn: boolean
   publicUrl: string | null
+  /** VAPID public key for waking paired devices with a push, or null when push is off. */
+  vapidKey: string | null
+}
+
+/** A paired device of ours that is online right now. */
+export interface PairedPeer {
+  pairId: string
+  peerId: string
+  name: string
+  device: DeviceKind
 }
 
 /** Opaque peer-to-peer payload routed by the server to the other participant of a session. */
 export type SignalData = { k: string; [key: string]: unknown }
 
 export type ClientMessage =
-  | { type: "hello"; v: number; name?: string }
+  | { type: "hello"; v: number; name?: string; device?: DeviceKind }
   | { type: "ping" }
   | { type: "rename"; name: string }
   | { type: "session.create"; id: string; kind: ShareKind; files: FileMeta[] }
@@ -70,8 +90,45 @@ export type ClientMessage =
       token: string
       failed?: boolean
     }
-  | { type: "session.invite"; id: string; sessionId: string; peerId: string }
+  | {
+      type: "session.invite"
+      id: string
+      sessionId: string
+      peerId: string
+      /** Inviting a paired device: the pair whose secret keys this share. */
+      pairId?: string
+    }
+  /** Pair ids derived from secrets in local storage; the server only matches them up. */
+  | { type: "pair.announce"; pairIds: string[] }
+  | { type: "pair.forget"; pairId: string }
+  | { type: "pair.wake"; id: string; pairId: string }
+  | { type: "push.register"; endpoint: string }
+  | {
+      type: "session.expire"
+      id: string
+      sessionId: string
+      token: string
+      minutes: number
+    }
   | { type: "signal"; sessionId: string; data: SignalData }
+  | { type: "request.create"; id: string; want: RequestWant; note: string }
+  | { type: "request.resume"; id: string; requestId: string; token: string }
+  | { type: "request.cancel"; id: string; requestId: string; token: string }
+  /** Sent by whoever answered, as owner of the share they just created. */
+  | {
+      type: "request.fulfil"
+      id: string
+      requestId: string
+      sessionId: string
+      keyed: boolean
+    }
+  | {
+      type: "request.decline"
+      id: string
+      requestId: string
+      token: string
+      sessionId: string
+    }
   | {
       type: "telemetry"
       event: string
@@ -89,6 +146,7 @@ export interface SessionView {
   totalSize: number
   expiresAt: number
   peerName: string | null
+  peerDevice: DeviceKind | null
   peerOnline: boolean
 }
 
@@ -99,6 +157,22 @@ export interface SessionPreview {
   totalSize: number
   expiresAt: number
   available: boolean
+}
+
+export interface RequestPreview {
+  requesterName: string
+  want: RequestWant
+  note: string
+  expiresAt: number
+  available: boolean
+}
+
+export interface RequestView {
+  requestId: string
+  token: string
+  want: RequestWant
+  note: string
+  expiresAt: number
 }
 
 export type ServerMessage =
@@ -116,13 +190,33 @@ export type ServerMessage =
       sessionId: string
       state: "joined" | "away" | "back"
       name: string
+      device: DeviceKind
     }
   | { type: "ended"; sessionId: string; reason: EndReason }
   | { type: "signal"; sessionId: string; data: SignalData }
-  | { type: "presence"; peers: Array<{ id: string; name: string }> }
+  | {
+      type: "presence"
+      peers: Array<{ id: string; name: string; device: DeviceKind }>
+    }
+  | { type: "pairs"; online: PairedPeer[] }
+  /** The other device removed this pairing. */
+  | { type: "unpaired"; pairId: string }
   | {
       type: "invite"
       sessionId: string
+      from: string
+      fromDevice: DeviceKind
+      pairId: string | null
+      kind: ShareKind
+      files: FileMeta[]
+      totalSize: number
+    }
+  /** Someone answered your request with this share. */
+  | {
+      type: "requested"
+      requestId: string
+      sessionId: string
+      keyed: boolean
       from: string
       kind: ShareKind
       files: FileMeta[]
@@ -194,7 +288,12 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case "hello":
       return typeof m.v === "number" &&
         (m.name === undefined || isStr(m.name, LIMITS.maxDeviceName))
-        ? { type: "hello", v: m.v, name: m.name as string | undefined }
+        ? {
+            type: "hello",
+            v: m.v,
+            name: m.name as string | undefined,
+            device: isDeviceKind(m.device) ? m.device : undefined,
+          }
         : null
     case "ping":
       return { type: "ping" }
@@ -236,17 +335,87 @@ export function parseClientMessage(raw: string): ClientMessage | null {
           }
         : null
     case "session.invite":
-      return isId(m.id) && isId(m.sessionId) && isId(m.peerId)
+      return isId(m.id) &&
+        isId(m.sessionId) &&
+        isId(m.peerId) &&
+        (m.pairId === undefined || isId(m.pairId))
         ? {
             type: "session.invite",
             id: m.id,
             sessionId: m.sessionId,
             peerId: m.peerId,
+            pairId: m.pairId as string | undefined,
+          }
+        : null
+    case "pair.announce":
+      return Array.isArray(m.pairIds) &&
+        m.pairIds.length <= 20 &&
+        m.pairIds.every(isId)
+        ? { type: "pair.announce", pairIds: m.pairIds as string[] }
+        : null
+    case "pair.forget":
+      return isId(m.pairId) ? { type: "pair.forget", pairId: m.pairId } : null
+    case "pair.wake":
+      return isId(m.id) && isId(m.pairId)
+        ? { type: "pair.wake", id: m.id, pairId: m.pairId }
+        : null
+    case "push.register":
+      return isStr(m.endpoint, 1024) && /^https:\/\//.test(m.endpoint)
+        ? { type: "push.register", endpoint: m.endpoint }
+        : null
+    case "session.expire":
+      return isId(m.id) &&
+        isId(m.sessionId) &&
+        isId(m.token) &&
+        EXPIRY_MINUTES.includes(m.minutes as 30)
+        ? {
+            type: "session.expire",
+            id: m.id,
+            sessionId: m.sessionId,
+            token: m.token,
+            minutes: m.minutes as number,
           }
         : null
     case "signal":
       return isId(m.sessionId) && isObj(m.data) && typeof m.data.k === "string"
         ? { type: "signal", sessionId: m.sessionId, data: m.data as SignalData }
+        : null
+    case "request.create": {
+      const note = typeof m.note === "string" ? m.note.trim() : ""
+      return isId(m.id) &&
+        (m.want === "files" || m.want === "screen") &&
+        note.length <= LIMITS.maxNote &&
+        !CONTROL_CHARS.test(note)
+        ? { type: "request.create", id: m.id, want: m.want, note }
+        : null
+    }
+    case "request.resume":
+    case "request.cancel":
+      return isId(m.id) && isId(m.requestId) && isId(m.token)
+        ? { type: m.type, id: m.id, requestId: m.requestId, token: m.token }
+        : null
+    case "request.fulfil":
+      return isId(m.id) && isId(m.requestId) && isId(m.sessionId)
+        ? {
+            type: "request.fulfil",
+            id: m.id,
+            requestId: m.requestId,
+            sessionId: m.sessionId,
+            keyed: m.keyed === true,
+          }
+        : null
+    case "request.decline":
+      return isId(m.id) &&
+        isId(m.requestId) &&
+        isId(m.token) &&
+        isId(m.sessionId)
+        ? {
+            type: "request.decline",
+            id: m.id,
+            requestId: m.requestId,
+            token: m.token,
+            sessionId: m.sessionId,
+          }
         : null
     case "telemetry": {
       if (!isStr(m.event, 64) || !isObj(m.data)) return null

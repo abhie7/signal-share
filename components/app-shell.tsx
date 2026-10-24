@@ -11,6 +11,7 @@ import { useClientValue } from "@/lib/use-client-value"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { SoundToggle } from "@/components/sound-toggle"
 import { InvitePrompt } from "@/components/invite-prompt"
+import { Shortcuts, command } from "@/components/shortcuts"
 import { Ambient, Avatar, LogoTile } from "@/components/brand"
 import { MorphicNavbar } from "@/components/kokonutui/morphic-navbar"
 import { GitHubLink, GitHubStars } from "@/components/github-link"
@@ -134,6 +135,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <span>No accounts. Nothing stored on the server.</span>
         <span className='flex flex-wrap gap-x-4 gap-y-2'>
           <GitHubLink />
+          <button
+            type='button'
+            onClick={() => command("keys")}
+            className='hidden hover:text-foreground sm:inline'
+          >
+            Shortcuts
+          </button>
           <Link href='/privacy' className='hover:text-foreground'>
             Privacy
           </Link>
@@ -144,6 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </footer>
 
       <InvitePrompt />
+      <Shortcuts />
       <Toaster
         position='bottom-center'
         theme={(resolvedTheme as "light" | "dark") ?? "dark"}

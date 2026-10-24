@@ -522,3 +522,51 @@
 ::selection {
   background: color-mix(in oklch, var(--teal) 30%, transparent);
 }
+
+/* Syntax colours for CodeView (highlight.js classes), from the brand palette. Mixed toward the
+   foreground so they keep contrast on both themes. */
+@layer components {
+  .code-view {
+    --code-mix: 72%;
+  }
+  .code-view .hljs-keyword,
+  .code-view .hljs-selector-tag,
+  .code-view .hljs-doctag {
+    color: color-mix(in oklch, var(--violet) var(--code-mix), var(--foreground));
+  }
+  .code-view .hljs-string,
+  .code-view .hljs-regexp,
+  .code-view .hljs-addition {
+    color: color-mix(in oklch, var(--mint) var(--code-mix), var(--foreground));
+  }
+  .code-view .hljs-number,
+  .code-view .hljs-literal,
+  .code-view .hljs-symbol {
+    color: color-mix(in oklch, var(--amber) var(--code-mix), var(--foreground));
+  }
+  .code-view .hljs-title,
+  .code-view .hljs-section {
+    color: color-mix(in oklch, var(--sky) var(--code-mix), var(--foreground));
+  }
+  .code-view .hljs-attr,
+  .code-view .hljs-attribute,
+  .code-view .hljs-property,
+  .code-view .hljs-variable,
+  .code-view .hljs-template-variable {
+    color: color-mix(in oklch, var(--teal) var(--code-mix), var(--foreground));
+  }
+  .code-view .hljs-built_in,
+  .code-view .hljs-type,
+  .code-view .hljs-deletion {
+    color: color-mix(in oklch, var(--coral) var(--code-mix), var(--foreground));
+  }
+  .code-view .hljs-comment,
+  .code-view .hljs-quote,
+  .code-view .hljs-meta,
+  .code-view .hljs-tag {
+    color: var(--muted-foreground);
+  }
+  .code-view .hljs-comment {
+    font-style: italic;
+  }
+}

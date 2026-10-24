@@ -34,6 +34,8 @@ const csp = [
   "font-src 'self'",
   "connect-src 'self' ws: wss:",
   "worker-src 'self' blob:",
+  "frame-src 'self' blob:", // PDF previews
+  "manifest-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

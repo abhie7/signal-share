@@ -7,13 +7,14 @@ import type {
   SessionView,
   ShareKind,
 } from "../lib/protocol.js"
+import type { DeviceKind } from "../lib/device.js"
 
 /** Unambiguous alphabet: no 0/O, 1/I/L. 31^6 ≈ 887M codes. */
 const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 const CODE_LENGTH = 6
 
 export const OPEN_TTL_MS = 30 * 60 * 1000 // unclaimed share
-export const MAX_LIFETIME_MS = 12 * 60 * 60 * 1000 // hard cap, any state
+export const MAX_LIFETIME_MS = 12 * 60 * 60 * 1000 // claimed share, from the claim
 export const AWAY_GRACE_MS = 2 * 60 * 1000 // participant socket gone before session ends
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000
 
@@ -22,6 +23,7 @@ export type Role = "owner" | "guest"
 export interface Participant<S> {
   token: string
   name: string
+  device: DeviceKind
   socket: S | null
   awaySince: number | null
 }
@@ -88,6 +90,7 @@ export class SessionRegistry<S> {
       kind: ShareKind
       files: FileMeta[]
       ownerName: string
+      ownerDevice?: DeviceKind
       requestId: string
       socket: S
     },
@@ -122,6 +125,7 @@ export class SessionRegistry<S> {
       owner: {
         token: token(),
         name: input.ownerName,
+        device: input.ownerDevice ?? "other",
         socket: null,
         awaySince: null,
       },
@@ -145,6 +149,7 @@ export class SessionRegistry<S> {
       code?: string
       sessionId?: string
       guestName: string
+      guestDevice?: DeviceKind
       requestId: string
       socket: S
     },
@@ -183,11 +188,13 @@ export class SessionRegistry<S> {
     session.guest = {
       token: token(),
       name: input.guestName,
+      device: input.guestDevice ?? "other",
       socket: null,
       awaySince: null,
     }
     // Claimed shares live until a participant leaves or stays away past the grace period.
-    session.expiresAt = session.createdAt + MAX_LIFETIME_MS
+    // Counted from the claim: a share claimed late in a long expiry must not expire at once.
+    session.expiresAt = now + MAX_LIFETIME_MS
     this.byCode.delete(session.code) // a code is single-use
     this.idempotency.set(input.requestId, {
       sessionId: session.id,
@@ -195,6 +202,27 @@ export class SessionRegistry<S> {
       at: now,
     })
     this.attach(session, "guest", input.socket)
+    return session
+  }
+
+  /** The owner changes how long the share stays open while nobody has claimed it. */
+  setExpiry(
+    sessionId: string,
+    tokenValue: string,
+    minutes: number,
+    now = Date.now(),
+  ) {
+    const session = this.sessions.get(sessionId)
+    if (!session)
+      throw new SessionError(
+        "SESSION_NOT_FOUND",
+        "This share has ended or expired.",
+      )
+    if (session.owner.token !== tokenValue)
+      throw new SessionError("UNAUTHORIZED", "Not your share.")
+    if (session.guest)
+      throw new SessionError("SESSION_FULL", "Someone already joined.")
+    session.expiresAt = now + minutes * 60_000
     return session
   }
 
@@ -306,6 +334,7 @@ export class SessionRegistry<S> {
       totalSize: session.totalSize,
       expiresAt: session.expiresAt,
       peerName: peer?.name ?? null,
+      peerDevice: peer?.device ?? null,
       peerOnline: Boolean(peer?.socket),
     }
   }

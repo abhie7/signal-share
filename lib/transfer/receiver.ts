@@ -2,6 +2,7 @@ import type { FileMeta } from "../protocol"
 import { ACK_EVERY_BYTES, decodeChunk, parseControl } from "./frames"
 import { foldDigests, sha256 } from "./crypto"
 import type { Pipe } from "./pipe"
+import { memorySink, type FileSink } from "./sink"
 
 export interface ReceiverEvents {
   onProgress(receivedBytes: number, totalBytes: number): void
@@ -9,10 +10,10 @@ export interface ReceiverEvents {
   onComplete(): void
   onCancel(reason?: string): void
   onError(message: string): void
+  /** The sender paused or resumed. */
+  onPause?(on: boolean): void
 }
 
-/** Spill buffered chunks into a Blob every few MB so file data leaves the JS heap. */
-const FLUSH_BYTES = 4 * 1024 * 1024
 const MAX_FILE_RETRIES = 2
 
 /**
@@ -23,12 +24,11 @@ export class FileReceiver {
   private pipe: Pipe | null = null
   private fi = 0
   private off = 0
-  private parts: Blob[] = []
-  private pending: Uint8Array<ArrayBuffer>[] = []
-  private pendingBytes = 0
   private digests: Uint8Array[] = []
   private lastAck = 0
   private retries = 0
+  /** A `ready` asking for a restart is on its way: chunks still in flight are dropped quietly. */
+  private resyncing = false
   private chain: Promise<void> = Promise.resolve()
   private offsets: number[]
   readonly total: number
@@ -38,6 +38,9 @@ export class FileReceiver {
   constructor(
     private files: FileMeta[],
     private events: ReceiverEvents,
+    public sink: FileSink = memorySink(files),
+    /** Where to continue if `sink` runs out of room (private browsing caps disk storage). */
+    private fallback?: () => FileSink,
   ) {
     let acc = 0
     this.offsets = files.map((f) => ((acc += f.size), acc - f.size))
@@ -58,6 +61,7 @@ export class FileReceiver {
         .then(() => this.handle(pipe, data))
         .catch((err) => this.events.onError(String(err)))
     }
+    this.resyncing = false
     // A pipe that dropped right after we finished may have lost `complete`: repeat it.
     this.sendCtl(
       this.done
@@ -91,17 +95,21 @@ export class FileReceiver {
       if (!chunk) return this.events.onError("Received a malformed data frame.")
       if (chunk.fileIndex === this.fi && chunk.offset < this.off) return // duplicate after resume
       if (chunk.fileIndex !== this.fi || chunk.offset !== this.off) {
-        // Out of sync (should not happen on an ordered pipe): ask the sender to restart here.
-        return this.sendCtl({ t: "ready", fi: this.fi, off: this.off })
+        // Out of sync: ask the sender to restart here, once, not for every chunk in flight.
+        if (!this.resyncing) this.resync()
+        return
       }
+      this.resyncing = false
       const meta = this.files[this.fi]
       if (!meta || this.off + chunk.payload.byteLength > meta.size)
         return this.events.onError("Received more data than announced.")
 
       this.digests.push(await sha256(chunk.payload))
-      this.pending.push(chunk.payload)
-      this.pendingBytes += chunk.payload.byteLength
-      if (this.pendingBytes >= FLUSH_BYTES) this.flush()
+      try {
+        await this.sink.write(this.fi, chunk.payload)
+      } catch (err) {
+        return this.switchSink(err)
+      }
       this.off += chunk.payload.byteLength
       this.events.onProgress(this.received, this.total)
       if (this.off - this.lastAck >= ACK_EVERY_BYTES) {
@@ -117,20 +125,22 @@ export class FileReceiver {
       case "end": {
         if (this.done || c.fi !== this.fi) return
         const meta = this.files[this.fi]
-        if (this.off !== meta.size)
-          return this.sendCtl({ t: "ready", fi: this.fi, off: this.off })
+        if (this.off !== meta.size) return this.resync()
         if ((await foldDigests(this.digests)) !== c.digest) {
           if (++this.retries > MAX_FILE_RETRIES)
             return this.events.onError(
               `“${meta.name}” failed its integrity check.`,
             )
+          await this.sink.reset(this.fi)
           this.resetFile()
-          return this.sendCtl({ t: "ready", fi: this.fi, off: 0 })
+          return this.resync()
         }
-        this.flush()
-        const blob = new Blob(this.parts, {
-          type: meta.type || "application/octet-stream",
-        })
+        let blob: Blob
+        try {
+          blob = await this.sink.finish(this.fi)
+        } catch (err) {
+          return this.switchSink(err)
+        }
         this.events.onFile(this.fi, blob)
         this.sendCtl({ t: "ack", fi: this.fi, off: this.off })
         this.sendCtl({ t: "ok", fi: this.fi })
@@ -146,6 +156,8 @@ export class FileReceiver {
       }
       case "cancel":
         return this.events.onCancel(c.reason)
+      case "pause":
+        return this.events.onPause?.(c.on)
       case "bye":
         return this.byeResolve?.()
       case "ping":
@@ -153,19 +165,24 @@ export class FileReceiver {
     }
   }
 
-  private flush() {
-    if (!this.pending.length) return
-    this.parts.push(new Blob(this.pending))
-    this.pending = []
-    this.pendingBytes = 0
+  /** The store failed mid-file: continue with the fallback, receiving this file again from 0. */
+  private async switchSink(err: unknown) {
+    if (!this.fallback) throw err
+    await this.sink.abort()
+    this.sink = this.fallback()
+    this.fallback = undefined
+    this.resetFile()
+    this.resync()
+  }
+
+  private resync() {
+    this.resyncing = true
+    this.sendCtl({ t: "ready", fi: this.fi, off: this.off })
   }
 
   private resetFile() {
     this.off = 0
     this.lastAck = 0
-    this.parts = []
-    this.pending = []
-    this.pendingBytes = 0
     this.digests = []
   }
 }

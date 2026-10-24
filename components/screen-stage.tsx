@@ -10,7 +10,12 @@ import {
 } from "@hugeicons/core-free-icons"
 import { Icon } from "@/components/icon"
 import { Btn, Spinner } from "@/components/ui-kit"
-import { cancel, changeSource, setPaused } from "@/lib/controller"
+import {
+  cancel,
+  changeSource,
+  setPaused,
+  setScreenQuality,
+} from "@/lib/controller"
 import { useShare } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -48,6 +53,7 @@ export function ScreenStage() {
   const box = useRef<HTMLDivElement>(null)
   const hasAudio = Boolean(s.remoteStream?.getAudioTracks().length)
   const live = s.phase === "streaming"
+  const security = s.security
 
   return (
     <div className='enter mx-auto flex w-full max-w-6xl flex-1 flex-col px-3 pb-6 pt-4 sm:px-6'>
@@ -73,6 +79,15 @@ export function ScreenStage() {
           {s.paused && (
             <span className='rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted-foreground'>
               Paused
+            </span>
+          )}
+          {live && <StreamStats />}
+          {live && security?.mode === "sas" && (
+            <span
+              className='rounded-full bg-surface-2 px-2 py-0.5 font-mono text-xs text-muted-foreground'
+              title='Security code: the same on both screens means nobody is in the middle.'
+            >
+              Code {security.sas}
             </span>
           )}
         </div>
@@ -177,7 +192,96 @@ export function SharerPreview() {
         <Btn size='sm' onClick={() => changeSource()}>
           Share something else
         </Btn>
+        <div
+          role='radiogroup'
+          aria-label='Stream quality'
+          className='ml-auto flex rounded-full bg-surface-2 p-1'
+        >
+          {(
+            [
+              ["smooth", "Smooth · 60 fps"],
+              ["sharp", "Sharp text"],
+            ] as const
+          ).map(([q, label]) => (
+            <button
+              key={q}
+              type='button'
+              role='radio'
+              aria-checked={s.screenQuality === q}
+              onClick={() => setScreenQuality(q)}
+              className={cn(
+                "pressable rounded-full px-3 py-1 text-xs font-medium",
+                s.screenQuality === q
+                  ? "bg-popover text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+      {s.phase === "streaming" && (
+        <p className='mt-2 text-xs text-muted-foreground'>
+          <StreamStats prefix='Sending' />
+        </p>
+      )}
     </div>
+  )
+}
+
+/** 3 = good, 2 = fair, 1 = poor, from round trip and packet loss. */
+export function signalBars(rtt: number | null, loss: number | null): number {
+  const r = rtt ?? 0
+  const l = loss ?? 0
+  if (r < 120 && l < 0.01) return 3
+  if (r < 300 && l < 0.05) return 2
+  return 1
+}
+
+const QUALITY_WORD = ["", "Poor", "Fair", "Good"] as const
+
+/** What is actually being delivered, e.g. "1080p · 60 fps", with connection quality bars. */
+function StreamStats({ prefix }: { prefix?: string }) {
+  const stats = useShare((s) => s.videoStats)
+  if (!stats) return null
+  const bars = signalBars(stats.rtt, stats.loss)
+  const detail = [
+    `${stats.width}×${stats.height} at ${stats.fps} frames per second`,
+    stats.rtt !== null && `round trip ${Math.round(stats.rtt)} ms`,
+    stats.loss !== null && `${(stats.loss * 100).toFixed(1)}% packets lost`,
+  ]
+    .filter(Boolean)
+    .join(", ")
+  return (
+    <span
+      className='inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-xs tabular-nums text-muted-foreground'
+      title={detail}
+    >
+      <span
+        className='flex h-2.5 items-end gap-px'
+        role='img'
+        aria-label={`Connection ${QUALITY_WORD[bars].toLowerCase()}`}
+      >
+        {[1, 2, 3].map((n) => (
+          <span
+            key={n}
+            className={cn(
+              "w-[3px] rounded-[1px]",
+              n <= bars
+                ? bars === 1
+                  ? "bg-coral"
+                  : bars === 2
+                    ? "bg-amber"
+                    : "bg-mint"
+                : "bg-border",
+            )}
+            style={{ height: `${n * 33}%` }}
+          />
+        ))}
+      </span>
+      {prefix ? `${prefix} ` : ""}
+      {stats.height}p · {stats.fps} fps
+    </span>
   )
 }

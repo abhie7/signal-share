@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { AppShell } from "@/components/app-shell"
 import { Glass } from "@/components/brand"
+import { ArrowLeft02FreeIcons } from "@hugeicons/core-free-icons"
+import { Icon } from "./icon"
 
 /** Layout for text pages: readable measure, clear way back. */
 export function ContentPage({
@@ -17,9 +19,10 @@ export function ContentPage({
       <article className='mx-auto w-full max-w-5xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12'>
         <Link
           href='/'
-          className='text-sm text-muted-foreground hover:text-foreground'
+          className='text-sm text-muted-foreground hover:text-foreground flex items-center gap-2'
         >
-          ← SignalShare
+          <Icon icon={ArrowLeft02FreeIcons} />
+          SignalShare
         </Link>
         <h1 className='display mt-4'>{title}</h1>
         {lead && (

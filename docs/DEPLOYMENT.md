@@ -45,6 +45,9 @@ Health: `GET /health` (liveness), `GET /ready` (503 until Next is prepared and d
 | `HTTPS_KEY_FILE` / `HTTPS_CERT_FILE` | :                                     | Serve TLS directly (e.g. mkcert certificates for LAN testing)                                                                                                        |
 | `SELF_PING_URL`                      | `$RENDER_EXTERNAL_URL/health` on Render | Keep-alive ping every 14 min so free hosts don't sleep (Render sleeps after 15 min idle). Automatic on Render in production; set a URL elsewhere, or `""` to disable |
 | `GITHUB_REPO`                        | `abhie7/signal-share`                   | Repo linked in the header and footer; the star count is fetched server-side hourly. `""` hides the link                                                              |
+| `PUSH_ENABLED`                       | on                                      | `false` turns off wake-up pushes for paired devices                                                                                                                 |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | generated per process               | Fixed VAPID keys (base64url raw P-256) so push subscriptions survive restarts. Without them devices re-subscribe after a restart, the next time they open the app |
+| `VAPID_SUBJECT`                      | `PUBLIC_URL` or a mailto                | Contact URL or `mailto:` sent to push services                                                                                                                     |
 | `ALLOWED_DEV_ORIGINS`                | 127.0.0.1, LAN IPs, tunnels           | Dev only: extra hosts allowed to load Next's dev assets and hot-reload socket (comma-separated, `*.example.com` wildcards)                                           |
 
 ## Render
@@ -84,9 +87,17 @@ cloudflared tunnel --url http://localhost:3000     # or: ngrok http 3000
    ends. Requires a TURN server; bandwidth flows through it (but it can't decrypt : DTLS is
    end-to-end).
 3. **Server relay** (files/text only) : uses the app server's bandwidth: every relayed byte crosses
-   it twice (in + out). Payloads are AES-GCM encrypted with an ECDH key agreed between the devices.
-   Caveat: keys are exchanged through the signaling server, so an operator who modified the server
-   could mount an active man-in-the-middle; a passive or logging server learns nothing.
+   it twice (in + out). Payloads are AES-GCM encrypted with the share keys (below).
+
+**Share keys.** Every share runs one ephemeral ECDH through signaling, mixed (HKDF) with the share
+secret from the link's `#fragment`, which never reaches the server. Both devices confirm the keys
+with HMACs, the relay is sealed with them, and WebRTC (data and screen) is only accepted after each
+side MACs its view of the DTLS fingerprints. So whoever opens a link (or answers with a request
+link, or receives on a paired device) is protected from a modified server on every route. Code
+joins and nearby invites have no secret (the server issues the code): there both screens show a
+4-digit security code to compare. Because a code join is always possible, a modified server could
+claim a share before the real recipient; the sender is protected automatically only when answering
+a request (secret-less joins are refused there), otherwise by comparing the security code.
 
 ### Running coturn
 
@@ -141,3 +152,18 @@ client-reported events (`client.connect.ok {path, ms, tries}`, `client.connect.f
 `client.transfer.done {bytes, ms, path}`, `client.share.failed {code}`,
 `client.screen.capture_failed {name}`, `client.screen.streaming`). Logs never contain file
 contents, text, keys, tokens or TURN credentials. `/metrics` exposes the same counters.
+
+## Paired devices and wake-up pushes
+
+Pairing secrets live only in the two browsers' local storage; the server sees a pair id derived
+from them, which lets it say when the other device is online and allow invitations across
+networks. If a device allowed notifications, the server keeps its push endpoint (in memory) and
+can send it an empty push when the other device taps Wake. Pushes carry no content, only go to
+browser push services (FCM, Mozilla, Apple, Windows), and are rate limited per pair. Generate
+fixed keys once with:
+
+```bash
+node -e "const c=require('crypto');const k=c.generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey.export({format:'jwk'});console.log('VAPID_PUBLIC_KEY='+Buffer.concat([Buffer.from([4]),Buffer.from(k.x,'base64url'),Buffer.from(k.y,'base64url')]).toString('base64url'));console.log('VAPID_PRIVATE_KEY='+k.d)"
+```
+
+On iPhone and iPad, web push only works once SignalShare is added to the Home Screen.

@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
+  Alert02Icon,
   ComputerScreenShareIcon,
   Delete02Icon,
   File01Icon,
@@ -22,10 +23,24 @@ import {
   shareText,
 } from "@/lib/controller"
 import { useConnection, type ShareError } from "@/lib/store"
+import { signaling } from "@/lib/signaling"
+import {
+  asLink,
+  classify,
+  receiveTarget,
+  TEXT_TYPES,
+  type TextKind,
+} from "@/lib/content"
+import { describeSecrets, findSecrets, redact } from "@/lib/secrets"
+import { highlight, languageLabel } from "@/components/code-view"
+import { RequestSection } from "@/components/request-section"
+import { MyDevices } from "@/components/my-devices"
 import { LIMITS, normalizeCode } from "@/lib/protocol"
-import { processDataTransfer, zipFolderSelection } from "@/lib/utils/zip"
+import { folderSelection, pathOf, processDataTransfer } from "@/lib/utils/zip"
 import { cn, formatBytes } from "@/lib/utils"
 import { useClientValue } from "@/lib/use-client-value"
+import { shuffleBag } from "@/lib/shuffle"
+import { useRouter } from "next/navigation"
 
 type Mode = "files" | "text" | "screen"
 
@@ -55,11 +70,9 @@ const HERO_WORDS = [
   "a friend.",
   "anywhere.",
   "the other side.",
-  "across the globe.",
   "another screen.",
   "your favorite human.",
   "the moon. (almost)",
-  "wherever.",
   "literally anywhere.",
   "your other half.",
   "the next room.",
@@ -67,14 +80,176 @@ const HERO_WORDS = [
   "the couch.",
   "your future self.",
   "someone special.",
-  "a tiny screen.",
-  "a bigger screen.",
   "the whole world.",
   "your crush.",
   "your bestie.",
+  "a potato with WiFi.",
+  "your emotional support screen.",
+  "the void.",
+  "the digital abyss.",
+  "your favorite gremlin.",
+  "a suspiciously tiny rectangle.",
+  "your internet soulmate.",
+  "the shadow realm.",
+  "a very confused toaster.",
+  "your secret admirer.",
+  "the mothership.",
+  "a parallel universe.",
+  "your favorite menace.",
+  "the land of pixels.",
+  "your long-distance pookie.",
+  "a screen far, far away.",
+  "the forbidden rectangle.",
+  "your designated yapper.",
+  "your favorite yapper.",
+  "the group chat goblins.",
+  "your digital twin.",
+  "someone who owes you money.",
+  "your sworn enemy.",
+  "your situationship.",
+  "the silly little cloud.",
+  "the other side of the planet.",
+  "your favorite NPC.",
+  "the chosen one.",
+  "the council of frogs.",
+  "a technologically advanced potato.",
+  "your tiny internet kingdom.",
+  "the depths of cyberspace.",
+  "your partner in silliness.",
+  "your future ex.",
+  "your favorite walking red flag.",
+  "the mysterious beyond.",
+  "the land of zero bars.",
+  "the intergalactic pigeon network.",
+  "your favorite little weirdo.",
+  "someone's glowing rectangle.",
+  "the quantum banana dimension.",
+  "your emergency contact.",
+  "the raccoon headquarters.",
+  "your favorite carbon-based lifeform.",
+  "the other side of the couch.",
+  "the secret frog society.",
+  "your crush's crush.",
+  "your mom's fridge. (maybe)",
+  "the spaghetti dimension.",
+  "your favorite collection of atoms.",
+  "someone who gets your memes.",
+  "your nemesis's toaster.",
+  "the cosmic soup.",
+  "your emotionally unavailable printer.",
+  "a raccoon with a MacBook.",
+  "the pigeon headquarters.",
+  "the last brain cell.",
+  "your digital pookie bear.",
+  "a goose with internet access.",
+  "the tiny hamster running the internet.",
+  "the secret third location.",
+  "your favorite unpaid therapist.",
+  "the interdimensional snack drawer.",
+  "the council of tiny ducks.",
+  "your legally assigned bestie.",
+  "the other side of the simulation.",
+  "a worm with big dreams.",
+  "your favorite silly little creature.",
+  "the place where lost socks go.",
+  "your favorite human-shaped problem.",
+  "the forbidden group chat.",
+  "the other end of the noodle.",
+  "your favorite cosmic accident.",
 ]
 
 const spring = { type: "spring", bounce: 0.15, duration: 0.45 } as const
+
+/** Greedy word wrap of `phrase` into lines no wider than `width`. */
+function wrapWords(
+  ctx: CanvasRenderingContext2D,
+  phrase: string,
+  width: number,
+) {
+  const lines: string[] = []
+  let line = ""
+  for (const word of phrase.split(" ")) {
+    const next = line ? `${line} ${word}` : word
+    if (line && ctx.measureText(next).width > width) {
+      lines.push(line)
+      line = word
+    } else line = next
+  }
+  lines.push(line)
+  return lines
+}
+
+/**
+ * The rotating phrase at full heading size. DynamicText lays out a single line, so the
+ * phrase is wrapped here and each line morphs on its own. The block always holds as many
+ * lines as the longest phrase needs at this width, so changing words never moves the page.
+ */
+function HeroLine() {
+  const [words] = useState(() => shuffleBag(HERO_WORDS))
+  const [step, setStep] = useState(0)
+  const [fit, setFit] = useState<{
+    wrap: (phrase: string) => string[]
+    rows: number
+  } | null>(null)
+  const host = useRef<HTMLSpanElement>(null)
+
+  useLayoutEffect(() => {
+    const el = host.current
+    const ctx = document.createElement("canvas").getContext("2d")
+    if (!el || !ctx) return
+    const measure = () => {
+      const font = getComputedStyle(el)
+      ctx.font = `${font.fontWeight} ${font.fontSize} ${font.fontFamily}`
+      // Canvas skips the heading's rounded axis; 3% slack keeps lines inside the box.
+      const width = el.clientWidth * 0.97
+      const wrap = (phrase: string) => wrapWords(ctx, phrase, width)
+      const rows = Math.max(...HERO_WORDS.map((w) => wrap(w).length))
+      setFit({ wrap, rows })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    void document.fonts?.ready.then(measure)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) setStep((s) => s + 1)
+    }, 1400)
+    return () => clearInterval(id)
+  }, [])
+
+  const phrase = words[step % words.length]
+  const lines = fit ? fit.wrap(phrase) : [phrase]
+  return (
+    <span ref={host} className='block text-teal'>
+      {/* Read once, not every 1.4 s. */}
+      <span className='sr-only'>{HERO_WORDS[0]}</span>
+      <span aria-hidden>
+        {Array.from({ length: fit?.rows ?? 2 }, (_, i) => (
+          <span key={i} className='block'>
+            <DynamicText text={lines[i] ?? ""} />
+          </span>
+        ))}
+      </span>
+    </span>
+  )
+}
+
+/** Runs `fn` once `selector` is on the page (panels mount after their exit animation). */
+function whenReady<T extends HTMLElement>(
+  selector: string,
+  fn: (el: T) => void,
+) {
+  let frames = 0
+  const tick = () => {
+    const el = document.querySelector<T>(selector)
+    if (el) return fn(el)
+    if (++frames < 40) requestAnimationFrame(tick)
+  }
+  tick()
+}
 
 /** Number of files being dragged, or 0 when the drag isn't carrying files. */
 const draggedFiles = (e: DragEvent | React.DragEvent) =>
@@ -83,8 +258,11 @@ const draggedFiles = (e: DragEvent | React.DragEvent) =>
     : 0
 
 export function Home() {
+  const router = useRouter()
   const [mode, setMode] = useState<Mode>("files")
   const [files, setFiles] = useState<File[]>([])
+  const [text, setText] = useState("")
+  const [code, setCode] = useState("")
   const [windowDrag, setWindowDrag] = useState(0)
 
   // Drop or paste files anywhere on the page; a drag anywhere arms the drop zone.
@@ -111,14 +289,46 @@ export function Home() {
       const dropped = await processDataTransfer(e.dataTransfer)
       setFiles((prev) => [...prev, ...dropped])
     }
+    // Paste anywhere: files go to Files, a share code or link goes to Receive, anything else
+    // becomes text to send. Inside a field, paste behaves normally.
     const onPaste = (e: ClipboardEvent) => {
       const target = e.target as HTMLElement | null
       if (target?.closest('textarea, input, [contenteditable="true"]')) return
       const pasted = Array.from(e.clipboardData?.files ?? [])
-      if (!pasted.length) return
-      setMode("files")
-      setFiles((prev) => [...prev, ...pasted])
+      if (pasted.length) {
+        setMode("files")
+        setFiles((prev) => [...prev, ...pasted])
+        return
+      }
+      const value = e.clipboardData?.getData("text/plain") ?? ""
+      if (!value.trim()) return
+      e.preventDefault()
+      const origins = [location.origin, signaling.welcome?.publicUrl ?? ""]
+      const goal = receiveTarget(value, origins)
+      if (goal && "path" in goal) return router.push(goal.path)
+      if (goal) {
+        setCode(goal.code)
+        whenReady("#receive-submit:enabled", (el) => el.focus())
+        return
+      }
+      setMode("text")
+      setText((prev) => (prev.trim() ? `${prev}\n${value}` : value))
+      whenReady<HTMLTextAreaElement>("#share-text", (el) => el.focus())
     }
+    // Commands from the palette and keyboard shortcuts (components/shortcuts.tsx).
+    const onCommand = (e: Event) => {
+      const what = (e as CustomEvent<string>).detail
+      if (what === "screen") return shareScreen() // still inside the key press or click
+      if (what === "receive") return whenReady("#code", (el) => el.focus())
+      if (what !== "files" && what !== "text") return
+      setMode(what)
+      if (what === "files")
+        whenReady<HTMLInputElement>("input[type=file][multiple]", (el) =>
+          el.click(),
+        )
+      else whenReady("#share-text", (el) => el.focus())
+    }
+    window.addEventListener("ss:command", onCommand)
     window.addEventListener("dragenter", onEnter)
     window.addEventListener("dragleave", onLeave)
     window.addEventListener("dragover", onOver)
@@ -130,8 +340,9 @@ export function Home() {
       window.removeEventListener("dragover", onOver)
       window.removeEventListener("drop", onDrop)
       window.removeEventListener("paste", onPaste)
+      window.removeEventListener("ss:command", onCommand)
     }
-  }, [])
+  }, [router])
 
   const active = MODES.find((m) => m.id === mode)!
   const nearby = useConnection((st) => st.nearby)
@@ -147,13 +358,7 @@ export function Home() {
           <div className='enter'>
             <h1 className='display'>
               Send anything to
-              <br />
-              {/* Own line, so the changing word width never reflows the first line. */}
-              <DynamicText
-                className='text-teal'
-                words={HERO_WORDS}
-                interval={1400}
-              />
+              <HeroLine />
             </h1>
             <p className='mt-4 max-w-xl text-pretty text-[17px] text-muted-foreground'>
               Files, text or your screen, to a phone, tablet or computer. Same
@@ -173,9 +378,10 @@ export function Home() {
         </div>
 
         <div className='mt-8 grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]'>
+          {/* Fills the row's height: the panel inside grows instead of leaving a gap. */}
           <Glass
             as='section'
-            className='p-4 sm:p-6'
+            className='flex flex-col p-4 sm:p-6'
             aria-labelledby='send-heading'
           >
             <div className='flex flex-wrap items-center justify-between gap-3'>
@@ -221,7 +427,7 @@ export function Home() {
             </div>
 
             <div
-              className='mt-5'
+              className='mt-5 flex flex-1 flex-col'
               role='tabpanel'
               id={`panel-${mode}`}
               aria-labelledby={`tab-${mode}`}
@@ -230,6 +436,7 @@ export function Home() {
               <AnimatePresence mode='wait' initial={false}>
                 <motion.div
                   key={mode}
+                  className='flex flex-1 flex-col'
                   initial={{ opacity: 0, y: 6, filter: "blur(3px)" }}
                   animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                   exit={{
@@ -246,7 +453,9 @@ export function Home() {
                       windowDrag={windowDrag}
                     />
                   )}
-                  {mode === "text" && <TextPanel />}
+                  {mode === "text" && (
+                    <TextPanel text={text} setText={setText} />
+                  )}
                   {mode === "screen" && <ScreenPanel />}
                 </motion.div>
               </AnimatePresence>
@@ -254,7 +463,8 @@ export function Home() {
           </Glass>
 
           <div className='flex flex-col gap-4'>
-            <ReceiveCard />
+            <ReceiveCard code={code} setCode={setCode} />
+            <MyDevices />
             <figure className='md:hidden' aria-label='Devices on your network'>
               <SignalOrbit me={me} peers={nearby} className='max-w-[13rem]' />
               <figcaption className='mt-1 text-center text-xs text-muted-foreground'>
@@ -328,7 +538,7 @@ function FilesPanel({
   }
 
   return (
-    <div>
+    <div className='flex flex-1 flex-col'>
       <input
         ref={input}
         type='file'
@@ -351,8 +561,8 @@ function FilesPanel({
           if (!picked.length) return
           setPacking(true)
           try {
-            const zip = await zipFolderSelection(picked)
-            setFiles((prev) => [...prev, zip])
+            const inside = await folderSelection(picked)
+            setFiles((prev) => [...prev, ...inside])
           } finally {
             setPacking(false)
           }
@@ -366,18 +576,16 @@ function FilesPanel({
         onDragEnter={(e) => setOver(draggedFiles(e))}
         onDragOver={(e) => setOver(draggedFiles(e))}
         onDragLeave={(e) => {
-          if (
-            !(
-              e.relatedTarget instanceof Node &&
-              e.currentTarget.contains(e.relatedTarget)
-            )
-          )
+          if (!(
+            e.relatedTarget instanceof Node &&
+            e.currentTarget.contains(e.relatedTarget)
+          ))
             setOver(0)
         }}
         onDrop={() => setOver(0)}
         aria-describedby='drop-hint'
         className={cn(
-          "group/zone flex w-full flex-col items-center gap-3 rounded-2xl border border-dashed px-6 text-center transition-[border-color,background-color,padding] duration-200",
+          "group/zone flex min-h-40 w-full flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 text-center transition-[border-color,background-color,padding] duration-200",
           files.length ? "py-5" : "py-10",
           over
             ? "border-solid border-[var(--accent)] bg-[color-mix(in_oklch,var(--accent)_10%,transparent)]"
@@ -413,8 +621,7 @@ function FilesPanel({
             )}
           </span>
           <span id='drop-hint' className='text-xs text-muted-foreground'>
-            Any file · folders are zipped · up to{" "}
-            {formatBytes(LIMITS.maxTotalBytes)}
+            Any file or folder · up to {formatBytes(LIMITS.maxTotalBytes)}
           </span>
         </span>
       </button>
@@ -434,7 +641,7 @@ function FilesPanel({
               <AnimatePresence initial={false}>
                 {files.map((f, i) => (
                   <motion.li
-                    key={`${f.name}-${f.size}-${f.lastModified}`}
+                    key={`${pathOf(f)}-${f.size}-${f.lastModified}`}
                     layout='position'
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
@@ -462,8 +669,10 @@ function FilesPanel({
                       )}
                       <span className='min-w-0 flex-1'>
                         <span className='block truncate'>{f.name}</span>
-                        <span className='block text-xs tabular-nums text-muted-foreground'>
+                        <span className='block truncate text-xs tabular-nums text-muted-foreground'>
                           {formatBytes(f.size)}
+                          {pathOf(f) !== f.name &&
+                            ` · ${pathOf(f).slice(0, -f.name.length - 1)}`}
                         </span>
                       </span>
                       <button
@@ -502,7 +711,7 @@ function FilesPanel({
               disabled={packing}
             >
               {packing && <Spinner className='size-3.5' />}
-              {packing ? "Packing folder…" : "Choose a folder instead"}
+              {packing ? "Reading folder…" : "Choose a folder instead"}
             </Btn>
           )}
         </span>
@@ -527,15 +736,56 @@ function FilesPanel({
 
 // ── Text ─────────────────────────────────────────────────────────────────────
 
-function TextPanel() {
-  const [text, setText] = useState("")
+/** Language of code being typed, detected a moment after typing stops. */
+function useDetectedLang(code: string | null) {
+  const [found, setFound] = useState<string | null>(null)
+  useEffect(() => {
+    if (!code) return
+    const t = setTimeout(() => {
+      highlight(code)
+        .then((r) => setFound(r.language))
+        .catch(() => {})
+    }, 400)
+    return () => clearTimeout(t)
+  }, [code])
+  return code ? found : null
+}
+
+const AS_LABEL: Record<TextKind, string> = {
+  text: "Text",
+  code: "Code",
+  link: "Link",
+}
+
+function TextPanel({
+  text,
+  setText,
+}: {
+  text: string
+  setText: React.Dispatch<React.SetStateAction<string>>
+}) {
+  const [override, setOverride] = useState<TextKind | null>(null)
   const bytes = new TextEncoder().encode(text.trim()).length
   const over = bytes > LIMITS.maxTextBytes
+  const detected = useMemo(() => classify(text), [text])
+  const link = asLink(text)
+  // What the receiver will see. A manual choice wins, unless it stopped making sense.
+  const kind = override === "link" && !link ? detected : (override ?? detected)
+  const lang = useDetectedLang(kind === "code" ? text : null)
+  const secrets = useMemo(() => findSecrets(text), [text])
+  const type =
+    kind === "code" && lang
+      ? `${TEXT_TYPES.code}; lang=${lang}`
+      : TEXT_TYPES[kind]
+  const send = () => bytes && !over && shareText(text, type)
+  const options: TextKind[] = link ? ["text", "link"] : ["text", "code"]
+
   return (
     <form
+      className='flex flex-1 flex-col'
       onSubmit={(e) => {
         e.preventDefault()
-        if (bytes && !over) shareText(text)
+        send()
       }}
     >
       <label htmlFor='share-text' className='sr-only'>
@@ -544,27 +794,83 @@ function TextPanel() {
       <textarea
         id='share-text'
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder='Paste a link, a note, an address…'
-        className='well min-h-48 w-full resize-y rounded-2xl p-4 text-[15px] leading-relaxed outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground/70 focus:border-[var(--accent)] focus:ring-4 focus:ring-[color-mix(in_oklch,var(--accent)_15%,transparent)]'
+        onChange={(e) => {
+          setText(e.target.value)
+          if (!e.target.value) setOverride(null)
+        }}
+        placeholder='Paste a link, some code, a note, an address…'
+        spellCheck={kind !== "code"}
+        className={cn(
+          "well min-h-48 w-full flex-1 resize-y rounded-2xl p-4 leading-relaxed outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground/70 focus:border-[var(--accent)] focus:ring-4 focus:ring-[color-mix(in_oklch,var(--accent)_15%,transparent)]",
+          kind === "code" ? "font-mono text-[13px]" : "text-[15px]",
+        )}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && bytes && !over)
-            shareText(text)
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send()
         }}
       />
-      <div className='mt-3 flex flex-wrap items-center justify-between gap-3'>
-        <span
-          className={cn(
-            "text-sm tabular-nums",
-            over ? "text-destructive" : "text-muted-foreground",
-          )}
+      {secrets.length > 0 && (
+        <div
+          role='alert'
+          className='enter mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-[color-mix(in_oklch,var(--warning)_45%,transparent)] bg-[color-mix(in_oklch,var(--warning)_10%,transparent)] p-3 text-sm'
         >
-          {over
-            ? `Too long, ${formatBytes(LIMITS.maxTextBytes)} max`
-            : `${text.length.toLocaleString()} characters · ⌘↵ to share`}
-        </span>
+          <Icon icon={Alert02Icon} className='size-4 shrink-0 text-warning' />
+          <span className='min-w-0 flex-1'>
+            <span className='font-medium'>
+              {secrets.length === 1
+                ? "1 possible secret"
+                : `${secrets.length} possible secrets`}
+            </span>{" "}
+            <span className='text-muted-foreground'>
+              ({describeSecrets(secrets)}). Whoever receives this can use them.
+            </span>
+          </span>
+          <Btn size='sm' onClick={() => setText(redact(text, secrets))}>
+            Redact
+          </Btn>
+        </div>
+      )}
+      <div className='mt-3 flex flex-wrap items-center justify-between gap-3'>
+        {text.trim() && !over ? (
+          <div
+            role='radiogroup'
+            aria-label='Send as'
+            className='flex items-center gap-1 text-sm'
+          >
+            <span className='mr-1 text-muted-foreground'>Send as</span>
+            {options.map((k) => (
+              <button
+                key={k}
+                type='button'
+                role='radio'
+                aria-checked={kind === k}
+                onClick={() => setOverride(k)}
+                className={cn(
+                  "pressable rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                  kind === k
+                    ? "border-[var(--accent)] bg-[color-mix(in_oklch,var(--accent)_12%,transparent)] text-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {k === "code" && kind === "code" && lang
+                  ? `Code · ${languageLabel(lang)}`
+                  : AS_LABEL[k]}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span
+            className={cn(
+              "text-sm tabular-nums",
+              over ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {over
+              ? `Too long, ${formatBytes(LIMITS.maxTextBytes)} max`
+              : "Tip: paste anywhere on this page · ⌘↵ to share"}
+          </span>
+        )}
         <Btn variant='primary' type='submit' disabled={!bytes || over}>
-          Share text
+          {secrets.length ? "Send anyway" : "Share text"}
         </Btn>
       </div>
     </form>
@@ -576,7 +882,7 @@ function TextPanel() {
 function ScreenPanel() {
   const supported = useClientValue(screenShareSupported, true)
   return (
-    <div>
+    <div className='flex flex-1 flex-col'>
       <div className='well rounded-2xl p-5'>
         <p className='font-medium'>Show your screen to another device, live.</p>
         <ul className='mt-3 space-y-2 text-sm text-muted-foreground'>
@@ -596,7 +902,7 @@ function ScreenPanel() {
           view). You can still watch a shared screen from here.
         </p>
       )}
-      <div className='mt-4 flex justify-end'>
+      <div className='mt-auto flex justify-end pt-4'>
         <Btn
           variant='primary'
           disabled={!supported}
@@ -611,8 +917,14 @@ function ScreenPanel() {
 
 // ── Receive ──────────────────────────────────────────────────────────────────
 
-function ReceiveCard() {
-  const [code, setCode] = useState("")
+function ReceiveCard({
+  code,
+  setCode,
+}: {
+  code: string
+  setCode: (code: string) => void
+}) {
+  const router = useRouter()
   const [error, setError] = useState<ShareError | null>(null)
   const [busy, setBusy] = useState(false)
   const clean = normalizeCode(code)
@@ -661,11 +973,22 @@ function ReceiveCard() {
             setCode(next)
             setError(null)
           }}
+          onPaste={(e) => {
+            // A pasted share link opens it, instead of being cut down to six characters.
+            const goal = receiveTarget(e.clipboardData.getData("text/plain"), [
+              location.origin,
+              signaling.welcome?.publicUrl ?? "",
+            ])
+            if (goal && "path" in goal) {
+              e.preventDefault()
+              router.push(goal.path)
+            }
+          }}
           inputMode='text'
           autoComplete='one-time-code'
           autoCapitalize='characters'
           spellCheck={false}
-          placeholder='ABC123'
+          placeholder='ABC234'
           aria-invalid={Boolean(error)}
           aria-describedby={error ? "code-error" : undefined}
           className={cn(
@@ -685,6 +1008,7 @@ function ReceiveCard() {
           </p>
         )}
         <Btn
+          id='receive-submit'
           variant='primary'
           type='submit'
           className='mt-3 w-full'
@@ -694,6 +1018,7 @@ function ReceiveCard() {
           {busy ? "Joining…" : "Receive"}
         </Btn>
       </form>
+      <RequestSection />
     </Glass>
   )
 }

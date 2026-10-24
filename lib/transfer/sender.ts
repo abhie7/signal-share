@@ -7,6 +7,8 @@ export interface SenderEvents {
   onComplete(): void
   onCancel(reason?: string): void
   onError(message: string): void
+  /** The receiver paused or resumed. */
+  onPause?(on: boolean): void
 }
 
 /**
@@ -20,6 +22,9 @@ export class FileSender {
   private sentAbs = 0
   private ackedAbs = 0
   private wake: (() => void) | null = null
+  /** Each side's own pause: the loop holds while either is set. */
+  private pausedHere = false
+  private pausedThere = false
   private digests: Uint8Array[][]
   private offsets: number[]
   readonly total: number
@@ -41,6 +46,12 @@ export class FileSender {
     pipe.onmessage = (data) => {
       if (typeof data === "string") this.onControl(data)
     }
+  }
+
+  /** Our pause: holds (or releases) the send loop. Unacked bytes in flight still arrive. */
+  setPaused(on: boolean) {
+    this.pausedHere = on
+    this.wake?.()
   }
 
   /** Stops any send loop bound to the current pipe. */
@@ -82,6 +93,11 @@ export class FileSender {
       case "cancel":
         this.events.onCancel(c.reason)
         return
+      case "pause":
+        this.pausedThere = c.on
+        this.wake?.()
+        this.events.onPause?.(c.on)
+        return
       case "ping":
         this.pipe.send(JSON.stringify({ t: "pong" }))
         return
@@ -104,7 +120,12 @@ export class FileSender {
         this.events.onProgress(this.ackedAbs, this.total)
 
         while (pos < blob.size) {
-          while (live() && this.sentAbs - this.ackedAbs >= WINDOW_BYTES) {
+          while (
+            live() &&
+            (this.pausedHere ||
+              this.pausedThere ||
+              this.sentAbs - this.ackedAbs >= WINDOW_BYTES)
+          ) {
             await new Promise<void>((r) => (this.wake = r))
           }
           if (!live()) return

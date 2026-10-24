@@ -22,6 +22,8 @@ export type Control =
   | { t: "complete" }
   | { t: "bye" }
   | { t: "cancel"; reason?: string }
+  /** Either side pauses or resumes; the sender holds its send loop while paused. */
+  | { t: "pause"; on: boolean }
   | { t: "ping" }
   | { t: "pong" }
 
@@ -56,6 +58,8 @@ export function parseControl(raw: string): Control | null {
         reason:
           typeof m.reason === "string" ? m.reason.slice(0, 200) : undefined,
       }
+    case "pause":
+      return typeof m.on === "boolean" ? { t: "pause", on: m.on } : null
     case "complete":
     case "bye":
     case "ping":

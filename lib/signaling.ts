@@ -5,6 +5,7 @@ import {
   type ServerMessage,
   type Welcome,
 } from "./protocol"
+import { thisDevice } from "./device"
 
 export type SignalingStatus = "connecting" | "online" | "offline" | "outdated"
 
@@ -101,6 +102,7 @@ class Signaling {
           type: "hello",
           v: PROTOCOL_VERSION,
           name,
+          device: thisDevice(),
         } satisfies ClientMessage),
       )
     }
