@@ -77,6 +77,7 @@ export function DevlogCompare() {
               key={`${key}-${device}`}
               src={shot.src}
               alt={shot.alt}
+              loading='eager' // first thing on the changelog page: it is the LCP image
               fill
               sizes={
                 device === "desktop"

@@ -406,3 +406,216 @@ test("repo link: star count fetched server-side, cached, and resilient to GitHub
     globalThis.fetch = realFetch
   }
 })
+
+test("request links: preview, one answer only, accept by joining, decline ends the answer", async () => {
+  const asker = await client()
+  await asker.welcome()
+  const r = await asker.request<{ requestId: string; token: string }>({
+    type: "request.create",
+    want: "files",
+    note: "the photos from Saturday",
+  })
+  const preview = await fetch(`http://${base}/api/requests/${r.requestId}`)
+  const body = await preview.json()
+  assert.equal(body.want, "files")
+  assert.equal(body.note, "the photos from Saturday")
+  assert.equal(body.available, true)
+  assert.equal(body.token, undefined, "the token never leaves the requester")
+
+  // Answering with the wrong kind is refused and doesn't use the request up.
+  const helper = await client()
+  await helper.welcome()
+  const screen = await helper.request<SessionView>({
+    type: "session.create",
+    kind: "screen",
+    files: [],
+  })
+  await assert.rejects(
+    helper.request({
+      type: "request.fulfil",
+      requestId: r.requestId,
+      sessionId: screen.sessionId,
+    }),
+    (e: Error & { code: string }) => e.code === "BAD_REQUEST",
+  )
+
+  // Nobody can answer with a share they don't own.
+  const stranger = await client()
+  await stranger.welcome()
+  const share = await helper.request<SessionView>({
+    type: "session.create",
+    kind: "files",
+    files,
+  })
+  await assert.rejects(
+    stranger.request({
+      type: "request.fulfil",
+      requestId: r.requestId,
+      sessionId: share.sessionId,
+    }),
+    (e: Error & { code: string }) => e.code === "UNAUTHORIZED",
+  )
+
+  await helper.request({
+    type: "request.fulfil",
+    requestId: r.requestId,
+    sessionId: share.sessionId,
+  })
+  // The same answer replayed (e.g. after a reconnect) succeeds again.
+  await helper.request({
+    type: "request.fulfil",
+    requestId: r.requestId,
+    sessionId: share.sessionId,
+  })
+  const offer = await asker.next((m) => m.type === "requested")
+  assert.ok(offer.type === "requested")
+  assert.equal(offer.sessionId, share.sessionId)
+  assert.deepEqual(offer.files, files)
+
+  // Single use: a second answer is refused.
+  const other = await stranger.request<SessionView>({
+    type: "session.create",
+    kind: "files",
+    files,
+  })
+  await assert.rejects(
+    stranger.request({
+      type: "request.fulfil",
+      requestId: r.requestId,
+      sessionId: other.sessionId,
+    }),
+    (e: Error & { code: string }) => e.code === "SESSION_NOT_FOUND",
+  )
+
+  // Declining can only end the share that answered, not another one.
+  await asker.request({
+    type: "request.decline",
+    requestId: r.requestId,
+    token: r.token,
+    sessionId: other.sessionId,
+  })
+  assert.ok(app.hub.registry.get(other.sessionId), "unrelated share untouched")
+  // Declining ends the answering share and tells its owner.
+  await asker.request({
+    type: "request.decline",
+    requestId: r.requestId,
+    token: r.token,
+    sessionId: share.sessionId,
+  })
+  const ended = await helper.next(
+    (m) => m.type === "ended" && m.sessionId === share.sessionId,
+  )
+  assert.ok(ended.type === "ended" && ended.reason === "declined")
+  assert.equal(
+    (await fetch(`http://${base}/api/requests/${r.requestId}`)).status,
+    404,
+  )
+  for (const c of [asker, helper, stranger]) c.ws.close()
+})
+
+test("request links: accepting is an ordinary join; a declined token can't end other shares", async () => {
+  const asker = await client()
+  await asker.welcome()
+  const r = await asker.request<{ requestId: string; token: string }>({
+    type: "request.create",
+    want: "files",
+    note: "",
+  })
+  const helper = await client()
+  await helper.welcome()
+  const share = await helper.request<SessionView>({
+    type: "session.create",
+    kind: "files",
+    files,
+  })
+  await helper.request({
+    type: "request.fulfil",
+    requestId: r.requestId,
+    sessionId: share.sessionId,
+  })
+  await asker.next((m) => m.type === "requested")
+  const joined = await asker.request<SessionView>({
+    type: "session.join",
+    sessionId: share.sessionId,
+  })
+  assert.equal(joined.role, "guest")
+  await asker.request({
+    type: "request.cancel",
+    requestId: r.requestId,
+    token: r.token,
+  })
+  // The request is gone; declining now changes nothing about the running share.
+  await assert.rejects(
+    asker.request({
+      type: "request.decline",
+      requestId: r.requestId,
+      token: r.token,
+      sessionId: share.sessionId,
+    }),
+    (e: Error & { code: string }) => e.code === "SESSION_NOT_FOUND",
+  )
+  assert.ok(app.hub.registry.get(share.sessionId), "share still running")
+  for (const c of [asker, helper]) c.ws.close()
+})
+
+test("pairing: paired devices find each other across networks, can invite, and unpair", async () => {
+  const home = { "x-forwarded-for": "203.0.113.10" }
+  const work = { "x-forwarded-for": "198.51.100.20" }
+  const a = await client({ headers: home })
+  a.send({ type: "hello", v: PROTOCOL_VERSION, device: "mac" })
+  await a.welcome()
+  const b = await client({ headers: work })
+  b.send({ type: "hello", v: PROTOCOL_VERSION, device: "iphone" })
+  await b.welcome()
+
+  a.send({ type: "pair.announce", pairIds: ["pairABC"] })
+  b.send({ type: "pair.announce", pairIds: ["pairABC"] })
+  const seen = await a.next((m) => m.type === "pairs" && m.online.length === 1)
+  assert.ok(seen.type === "pairs")
+  assert.equal(seen.online[0].device, "iphone")
+  const bSeen = await b.next((m) => m.type === "pairs" && m.online.length === 1)
+  assert.ok(bSeen.type === "pairs" && bSeen.online[0].device === "mac")
+
+  const share = await a.request<SessionView>({
+    type: "session.create",
+    kind: "files",
+    files,
+  })
+  // Different networks: only the pairing allows the invitation.
+  await assert.rejects(
+    a.request({
+      type: "session.invite",
+      sessionId: share.sessionId,
+      peerId: seen.online[0].peerId,
+    }),
+    (e: Error & { code: string }) => e.code === "PEER_NOT_FOUND",
+  )
+  await a.request({
+    type: "session.invite",
+    sessionId: share.sessionId,
+    peerId: seen.online[0].peerId,
+    pairId: "pairABC",
+  })
+  const invite = await b.next((m) => m.type === "invite")
+  assert.ok(invite.type === "invite")
+  assert.equal(invite.pairId, "pairABC")
+  assert.equal(invite.fromDevice, "mac")
+
+  // A device that never announced the pair can't wake it.
+  const stranger = await client({ headers: work })
+  await stranger.welcome()
+  await assert.rejects(
+    stranger.request({ type: "pair.wake", pairId: "pairABC" }),
+    (e: Error & { code: string }) => e.code === "UNAUTHORIZED",
+  )
+  // Nothing registered to wake: a clear answer, not a hang.
+  await assert.rejects(
+    a.request({ type: "pair.wake", pairId: "pairABC" }),
+    (e: Error & { code: string }) => e.code === "PEER_NOT_FOUND",
+  )
+
+  a.send({ type: "pair.forget", pairId: "pairABC" })
+  const gone = await b.next((m) => m.type === "unpaired")
+  assert.ok(gone.type === "unpaired" && gone.pairId === "pairABC")
+  for (const c of [a, b, stranger]) c.ws.close()
+})

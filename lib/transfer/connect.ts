@@ -1,6 +1,6 @@
 import { signaling } from "../signaling"
 import type { ServerMessage, SignalData } from "../protocol"
-import { deriveKey, exportPublicKey, generateKeyPair } from "./crypto"
+import { checkTag, dtlsLabel, tag, type ShareKeys } from "./handshake"
 import { dataChannelPipe, relayPipe, type Pipe } from "./pipe"
 import { PathError, Peer, waitConnected, type FailReason } from "./rtc"
 
@@ -12,6 +12,9 @@ import { PathError, Peer, waitConnected, type FailReason } from "./rtc"
 //
 // The receiver initiates (`connect`), the sender decides the rung. Only the receiver retries,
 // so the two sides can never run competing attempts.
+//
+// Both rungs are bound to the share keys (handshake.ts): the relay is sealed with them, and a
+// WebRTC channel only counts after each side MACed its view of the DTLS fingerprints.
 
 export interface Attempt {
   transport: "webrtc" | "relay"
@@ -42,7 +45,7 @@ export const TIMEOUTS = {
   receiver: 50_000,
 }
 
-type ConnectRequest = { a: number; pub: JsonWebKey; webrtc: boolean }
+type ConnectRequest = { a: number; webrtc: boolean }
 
 const hasWebRTC = () => typeof RTCPeerConnection !== "undefined"
 
@@ -91,16 +94,64 @@ function channelOpen(dc: RTCDataChannel): Promise<void> {
 function ping(pipe: Pipe): Promise<void> {
   return new Promise((resolve) => {
     pipe.onmessage = (d) => {
-      if (typeof d === "string" && d.includes('"pong"')) resolve()
+      if (typeof d === "string" && d.includes('"pong"')) {
+        pipe.onmessage = null // what follows waits for the transfer's handler
+        resolve()
+      }
     }
     pipe.send(JSON.stringify({ t: "ping" }))
   })
+}
+
+/** The next `{t:"auth"}` tag on a pipe. Listens synchronously, so nothing is missed. */
+function nextAuth(pipe: Pipe): Promise<unknown> {
+  return new Promise((resolve) => {
+    pipe.onmessage = (d) => {
+      if (typeof d !== "string" || !d.includes('"auth"')) return
+      pipe.onmessage = null // what follows waits for the transfer's handler
+      try {
+        resolve(JSON.parse(d).tag)
+      } catch {
+        resolve(null)
+      }
+    }
+  })
+}
+
+/** Sender: vouch for this WebRTC connection, then require the receiver to do the same. */
+async function proveSender(pipe: Pipe, keys: ShareKeys, pc: RTCPeerConnection) {
+  const reply = nextAuth(pipe)
+  pipe.send(
+    JSON.stringify({
+      t: "auth",
+      tag: await tag(keys, dtlsLabel("sender", pc, "mine")),
+    }),
+  )
+  if (!(await checkTag(keys, dtlsLabel("receiver", pc, "theirs"), await reply)))
+    throw new PathError("auth-failed")
+}
+
+async function proveReceiver(
+  pipe: Pipe,
+  keys: ShareKeys,
+  pc: RTCPeerConnection,
+) {
+  const theirs = await nextAuth(pipe)
+  if (!(await checkTag(keys, dtlsLabel("sender", pc, "theirs"), theirs)))
+    throw new PathError("auth-failed")
+  pipe.send(
+    JSON.stringify({
+      t: "auth",
+      tag: await tag(keys, dtlsLabel("receiver", pc, "mine")),
+    }),
+  )
 }
 
 function answerPing(pipe: Pipe): Promise<void> {
   return new Promise((resolve) => {
     pipe.onmessage = (d) => {
       if (typeof d === "string" && d.includes('"ping"')) {
+        pipe.onmessage = null
         pipe.send(JSON.stringify({ t: "pong" }))
         resolve()
       }
@@ -133,11 +184,10 @@ export async function offerPath(
   sessionId: string,
   token: string,
   req: ConnectRequest,
+  keys: ShareKeys,
   signal: AbortSignal,
 ): Promise<Established> {
   const attempts: Attempt[] = []
-  const keys = await generateKeyPair()
-  const pub = await exportPublicKey(keys.publicKey)
   let peer: Peer | null = null
   const unsubscribe = onSessionSignal(
     sessionId,
@@ -171,7 +221,12 @@ export async function offerPath(
         )
         const p = peer
         const pipe = dataChannelPipe(dc, await p.pathKind(), () => p.close())
-        await timeout(ping(pipe), TIMEOUTS.verify, "verify-timeout", signal)
+        await timeout(
+          proveSender(pipe, keys, p.pc),
+          TIMEOUTS.verify,
+          "verify-timeout",
+          signal,
+        )
         attempts.push({
           transport: "webrtc",
           ok: true,
@@ -182,7 +237,7 @@ export async function offerPath(
         peer?.close()
         peer = null
         const reason = err instanceof PathError ? err.reason : "ice-failed"
-        if (reason === "aborted") throw err
+        if (reason === "aborted" || reason === "auth-failed") throw err
         attempts.push({
           transport: "webrtc",
           ok: false,
@@ -205,15 +260,14 @@ export async function offerPath(
     }
     const t0 = performance.now()
     try {
-      const key = await deriveKey(keys.privateKey, req.pub)
-      sendSignal(sessionId, { k: "relay", a: req.a, pub })
+      sendSignal(sessionId, { k: "relay", a: req.a })
       const ws = await timeout(
         openRelay(sessionId, token),
         TIMEOUTS.relay,
         "relay-timeout",
         signal,
       )
-      const pipe = relayPipe(ws, key)
+      const pipe = relayPipe(ws, keys.relay, "sender")
       await timeout(ping(pipe), TIMEOUTS.verify, "verify-timeout", signal)
       attempts.push({
         transport: "relay",
@@ -239,15 +293,8 @@ export async function offerPath(
 }
 
 export function parseConnectRequest(data: SignalData): ConnectRequest | null {
-  return data.k === "connect" &&
-    Number.isSafeInteger(data.a) &&
-    typeof data.pub === "object" &&
-    data.pub
-    ? {
-        a: data.a as number,
-        pub: data.pub as JsonWebKey,
-        webrtc: data.webrtc === true,
-      }
+  return data.k === "connect" && Number.isSafeInteger(data.a)
+    ? { a: data.a as number, webrtc: data.webrtc === true }
     : null
 }
 
@@ -256,10 +303,9 @@ export async function requestPath(
   sessionId: string,
   token: string,
   attempt: number,
+  keys: ShareKeys,
   signal: AbortSignal,
 ): Promise<Established> {
-  const keys = await generateKeyPair()
-  const pub = await exportPublicKey(keys.publicKey)
   let peer = null as Peer | null
   let unsubscribe = () => {}
   const started = performance.now()
@@ -296,11 +342,15 @@ export async function requestPath(
           p.pc.ondatachannel = (e) => {
             const dc = e.channel
             void channelOpen(dc).then(async () => {
-              // Listen for the sender's ping before any await, or it could arrive unheard.
+              // Listen for the sender's proof before any await, or it could arrive unheard.
               const pipe = dataChannelPipe(dc, "direct", () => p.close())
-              const answered = answerPing(pipe)
+              const proved = proveReceiver(pipe, keys, p.pc)
               pipe.kind = await p.pathKind()
-              await answered
+              try {
+                await proved
+              } catch (err) {
+                return finish(err as PathError)
+              }
               finish(null, pipe, "webrtc")
             })
           }
@@ -310,8 +360,11 @@ export async function requestPath(
         } else if (data.k === "relay") {
           peer?.close()
           peer = null
-          const key = await deriveKey(keys.privateKey, data.pub as JsonWebKey)
-          const pipe = relayPipe(await openRelay(sessionId, token), key)
+          const pipe = relayPipe(
+            await openRelay(sessionId, token),
+            keys.relay,
+            "receiver",
+          )
           await answerPing(pipe)
           finish(null, pipe, "relay")
         } else if (data.k === "fail") {
@@ -327,7 +380,7 @@ export async function requestPath(
     })
   })
 
-  sendSignal(sessionId, { k: "connect", a: attempt, pub, webrtc: hasWebRTC() })
+  sendSignal(sessionId, { k: "connect", a: attempt, webrtc: hasWebRTC() })
   try {
     return await timeout(result, TIMEOUTS.receiver, "peer-timeout", signal)
   } catch (err) {

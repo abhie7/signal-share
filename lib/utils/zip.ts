@@ -1,4 +1,33 @@
 import type { ZipEntry } from "./zip.worker"
+import { LIMITS } from "../protocol"
+
+/** Folder path of a file picked inside a folder ("Photos/2024/a.jpg"). Sent as its name. */
+const relPath = new WeakMap<File, string>()
+export const pathOf = (file: File) => relPath.get(file) ?? file.name
+
+/**
+ * Folders travel as their files with relative paths, so the receiver gets a real folder.
+ * Only folders too big for one share's file list (500 files, 64 KB of names) are zipped.
+ */
+async function folderFiles(entries: ZipEntry[], name: string): Promise<File[]> {
+  const metaBytes = JSON.stringify(
+    entries.map((e) => ({
+      name: e.path,
+      size: e.file.size,
+      type: e.file.type,
+    })),
+  ).length
+  const fits =
+    entries.length <= LIMITS.maxFiles &&
+    metaBytes < 48 * 1024 &&
+    entries.every((e) => e.path.length <= LIMITS.maxNameLength)
+  if (fits) {
+    for (const { path, file } of entries) relPath.set(file, path)
+    return entries.map((e) => e.file)
+  }
+  const blob = await generateZipBlob(entries)
+  return [new File([blob], `${name}.zip`, { type: "application/zip" })]
+}
 
 interface WebkitFileSystemEntry {
   name: string
@@ -160,9 +189,8 @@ export async function generateZipBlob(entries: ZipEntry[]): Promise<Blob> {
 }
 
 /**
- * Checks if a DataTransfer object contains directories.
- * If yes, it processes them, zips the directories together with any loose files,
- * and returns an array of Files containing the zip. If no directories, returns the files as is.
+ * Files from a drop. Dropped folders keep their structure (see folderFiles); without folders,
+ * the files are returned as they are.
  */
 export async function processDataTransfer(
   dataTransfer: DataTransfer,
@@ -206,32 +234,24 @@ export async function processDataTransfer(
     )
     await runWithConcurrency(tasks, CONCURRENCY_LIMIT)
 
-    // Phase 2: generate the ZIP off the main thread via a Web Worker
-    const zipBlob = await generateZipBlob(zipEntries)
     const folderName =
       fsEntries.length === 1 && fsEntries[0]?.name
         ? fsEntries[0].name
         : "Archive"
-
-    const zipFile = new File([zipBlob], `${folderName}.zip`, {
-      type: "application/zip",
-    })
-    return [zipFile]
+    return await folderFiles(zipEntries, folderName)
   } finally {
     clearTimeout(slowTimer)
     onSlowProcessingChange?.(false)
   }
 }
 
-/** Zips the files picked through an `<input webkitdirectory>` into a single archive. */
-export async function zipFolderSelection(files: File[]): Promise<File> {
+/** The files picked through an `<input webkitdirectory>`, with their folder paths. */
+export async function folderSelection(files: File[]): Promise<File[]> {
   const entries = files.map((file) => ({
     path:
       (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
       file.name,
     file,
   }))
-  const root = entries[0]?.path.split("/")[0] || "Folder"
-  const blob = await generateZipBlob(entries)
-  return new File([blob], `${root}.zip`, { type: "application/zip" })
+  return folderFiles(entries, entries[0]?.path.split("/")[0] || "Folder")
 }

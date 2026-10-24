@@ -18,6 +18,9 @@ import {
   type Role,
   type Session,
 } from "./sessions.js"
+import { RequestRegistry } from "./requests.js"
+import { wake } from "./push.js"
+import type { DeviceKind } from "../lib/device.js"
 
 const IDLE_TIMEOUT_MS = 60_000
 const RELAY_HIGH_WATER = 16 * 1024 * 1024
@@ -26,6 +29,11 @@ const RELAY_LOW_WATER = 2 * 1024 * 1024
 interface Client {
   id: string
   name: string
+  device: DeviceKind
+  /** Pair ids this device announced (derived from secrets only the paired devices hold). */
+  pairs: Set<string>
+  /** Push endpoint for waking this device later, if it allowed notifications. */
+  endpoint: string | null
   ip: string
   key: string
   socket: WebSocket
@@ -43,12 +51,18 @@ const OPEN = 1
 
 export class Hub {
   readonly registry = new SessionRegistry<WebSocket>(config.maxSessions)
+  readonly requests = new RequestRegistry<WebSocket>(config.maxSessions)
   private clients = new Map<WebSocket, Client>()
   private byId = new Map<string, Client>()
   private ipCounts = new Map<string, number>()
   private joinLimiter = new KeyedLimiter(20, 20 / 60)
   private createLimiter = new KeyedLimiter(30, 30 / 60)
   private rooms = new Map<string, RelayRoom>()
+  /** pairId → devices online with it. */
+  private pairs = new Map<string, Set<Client>>()
+  /** pairId → push endpoints of its devices, kept after they go offline (memory only). */
+  private wakeups = new Map<string, Set<string>>()
+  private wakeLimiter = new KeyedLimiter(2, 1 / 30)
   readonly metrics: Record<string, number> = {}
   private timer: ReturnType<typeof setInterval> | null = null
 
@@ -81,6 +95,9 @@ export class Hub {
     const client: Client = {
       id: randomBytes(9).toString("base64url"),
       name: generateName(),
+      device: "other",
+      pairs: new Set(),
+      endpoint: null,
       ip,
       key: presenceKey(ip),
       socket,
@@ -141,6 +158,7 @@ export class Hub {
         return
       }
       if (msg.name) c.name = msg.name
+      if (msg.device) c.device = msg.device
       const first = !c.greeted
       c.greeted = true
       this.byId.set(c.id, c)
@@ -154,6 +172,7 @@ export class Hub {
         relay: config.relayEnabled,
         turn: turnConfigured,
         publicUrl: config.publicUrl,
+        vapidKey: config.vapid?.publicKey ?? null,
       })
       if (first) this.broadcastPresence(c.key)
       return
@@ -184,6 +203,7 @@ export class Hub {
           kind: msg.kind,
           files: msg.files,
           ownerName: c.name,
+          ownerDevice: c.device,
           requestId: msg.id,
           socket: c.socket,
         })
@@ -214,6 +234,7 @@ export class Hub {
             code: msg.code,
             sessionId: msg.sessionId,
             guestName: c.name,
+            guestDevice: c.device,
             requestId: msg.id,
             socket: c.socket,
           })
@@ -231,6 +252,7 @@ export class Hub {
             sessionId: session.id,
             state: "joined",
             name: c.name,
+            device: c.device,
           })
           return this.registry.view(session, "guest")
         })
@@ -254,6 +276,7 @@ export class Hub {
               sessionId: session.id,
               state: "back",
               name: c.name,
+              device: c.device,
             })
           return this.registry.view(session, role)
         })
@@ -270,8 +293,13 @@ export class Hub {
         )
           return this.fail(c.socket, msg.id, "UNAUTHORIZED", "Not your share")
         const target = this.byId.get(msg.peerId)
-        // Only devices on the same network can be invited : no unsolicited prompts to strangers.
-        if (!target || target.key !== c.key || target === c)
+        // Only devices on the same network, or paired with us, can be invited: no unsolicited
+        // prompts to strangers.
+        const pairId =
+          msg.pairId && c.pairs.has(msg.pairId) && target?.pairs.has(msg.pairId)
+            ? msg.pairId
+            : null
+        if (!target || target === c || (target.key !== c.key && !pairId))
           return this.fail(
             c.socket,
             msg.id,
@@ -282,11 +310,155 @@ export class Hub {
           type: "invite",
           sessionId: session.id,
           from: c.name,
+          fromDevice: c.device,
+          pairId,
           kind: session.kind,
           files: session.files,
           totalSize: session.totalSize,
         })
         return this.ok(c.socket, msg.id, null)
+      }
+
+      case "session.expire":
+        return this.guard(c.socket, msg.id, () => {
+          const session = this.registry.setExpiry(
+            msg.sessionId,
+            msg.token,
+            msg.minutes,
+          )
+          return this.registry.view(session, "owner")
+        })
+
+      case "request.create": {
+        if (!this.createLimiter.take(c.ip))
+          return this.fail(
+            c.socket,
+            msg.id,
+            "RATE_LIMITED",
+            "Too many requests. Wait a moment.",
+          )
+        return this.guard(c.socket, msg.id, () => {
+          const r = this.requests.create({
+            want: msg.want,
+            note: msg.note,
+            ownerName: c.name,
+            requestId: msg.id,
+            socket: c.socket,
+          })
+          this.count("request.created")
+          return {
+            requestId: r.id,
+            token: r.token,
+            want: r.want,
+            note: r.note,
+            expiresAt: r.expiresAt,
+          }
+        })
+      }
+
+      case "request.resume":
+        return this.guard(c.socket, msg.id, () => {
+          this.requests.resume(msg.requestId, msg.token, c.socket)
+          return null
+        })
+
+      case "request.cancel":
+        return this.guard(c.socket, msg.id, () => {
+          this.requests.cancel(msg.requestId, msg.token)
+          return null
+        })
+
+      case "request.fulfil":
+        return this.guard(c.socket, msg.id, () => {
+          const session = this.registry.get(msg.sessionId)
+          if (
+            !session ||
+            session.guest ||
+            this.registry.roleOfSocket(session, c.socket) !== "owner"
+          )
+            throw new SessionError("UNAUTHORIZED", "Not your share.")
+          const r = this.requests.claim(msg.requestId, session.kind, session.id)
+          this.count("request.answered")
+          this.send(r.socket!, {
+            type: "requested",
+            requestId: r.id,
+            sessionId: session.id,
+            keyed: msg.keyed,
+            from: c.name,
+            kind: session.kind,
+            files: session.files,
+            totalSize: session.totalSize,
+          })
+          return null
+        })
+
+      case "request.decline":
+        return this.guard(c.socket, msg.id, () => {
+          // Only the share that answered this request can be ended this way.
+          const answered = this.requests.decline(
+            msg.requestId,
+            msg.token,
+            msg.sessionId,
+          )
+          const session = answered && this.registry.get(msg.sessionId)
+          if (session && !session.guest) {
+            this.registry.end(session.id)
+            if (session.owner.socket)
+              this.send(session.owner.socket, {
+                type: "ended",
+                sessionId: session.id,
+                reason: "declined",
+              })
+          }
+          this.count("request.declined")
+          return null
+        })
+
+      case "pair.announce":
+        return this.announcePairs(c, new Set(msg.pairIds))
+
+      case "pair.forget": {
+        if (!c.pairs.has(msg.pairId)) return
+        for (const other of this.pairs.get(msg.pairId) ?? [])
+          if (other !== c)
+            this.send(other.socket, { type: "unpaired", pairId: msg.pairId })
+        this.wakeups.delete(msg.pairId)
+        const next = new Set(c.pairs)
+        next.delete(msg.pairId)
+        return this.announcePairs(c, next)
+      }
+
+      case "push.register":
+        c.endpoint = msg.endpoint
+        for (const id of c.pairs) this.rememberWakeup(id, msg.endpoint)
+        return
+
+      case "pair.wake": {
+        if (!c.pairs.has(msg.pairId) || !config.vapid)
+          return this.fail(c.socket, msg.id, "UNAUTHORIZED", "Not paired.")
+        if (!this.wakeLimiter.take(msg.pairId))
+          return this.fail(
+            c.socket,
+            msg.id,
+            "RATE_LIMITED",
+            "Already sent. Give it a moment.",
+          )
+        const targets = [...(this.wakeups.get(msg.pairId) ?? [])].filter(
+          (e) => e !== c.endpoint,
+        )
+        const vapid = config.vapid
+        void Promise.all(targets.map((e) => wake(vapid, e))).then((sent) => {
+          this.count("push.sent", sent.filter(Boolean).length)
+          if (sent.some(Boolean)) this.ok(c.socket, msg.id, null)
+          else
+            this.fail(
+              c.socket,
+              msg.id,
+              "PEER_NOT_FOUND",
+              "That device can’t be woken up. Open SignalShare on it once with notifications allowed.",
+            )
+        })
+        return
       }
 
       case "signal": {
@@ -338,12 +510,15 @@ export class Hub {
     const n = (this.ipCounts.get(c.ip) ?? 1) - 1
     if (n <= 0) this.ipCounts.delete(c.ip)
     else this.ipCounts.set(c.ip, n)
+    this.requests.detach(c.socket)
+    if (c.greeted) this.announcePairs(c, new Set())
     for (const { session, role } of this.registry.detach(c.socket)) {
       this.notify(session, role, {
         type: "peer",
         sessionId: session.id,
         state: "away",
         name: c.name,
+        device: c.device,
       })
     }
     if (c.greeted) this.broadcastPresence(c.key)
@@ -373,7 +548,9 @@ export class Hub {
         "session",
       )
     }
+    this.requests.sweep(now)
     this.joinLimiter.prune()
+    this.wakeLimiter.prune()
     this.createLimiter.prune()
   }
 
@@ -391,8 +568,50 @@ export class Hub {
       const peers = group
         .filter((p) => p !== c)
         .slice(0, 50)
-        .map((p) => ({ id: p.id, name: p.name }))
+        .map((p) => ({ id: p.id, name: p.name, device: p.device }))
       this.send(c.socket, { type: "presence", peers })
+    }
+  }
+
+  private rememberWakeup(pairId: string, endpoint: string) {
+    let set = this.wakeups.get(pairId)
+    if (!set) this.wakeups.set(pairId, (set = new Set()))
+    set.add(endpoint)
+    // A pair has two devices; a few endpoints cover re-subscriptions. Keep the newest.
+    if (set.size > 4) set.delete(set.values().next().value!)
+  }
+
+  /** Updates which pairs a device is in, and tells everyone affected who is online. */
+  private announcePairs(c: Client, next: Set<string>) {
+    const touched = new Set([...c.pairs, ...next])
+    for (const id of c.pairs)
+      if (!next.has(id)) {
+        this.pairs.get(id)?.delete(c)
+        if (!this.pairs.get(id)?.size) this.pairs.delete(id)
+      }
+    for (const id of next) {
+      let set = this.pairs.get(id)
+      if (!set) this.pairs.set(id, (set = new Set()))
+      set.add(c)
+      if (c.endpoint) this.rememberWakeup(id, c.endpoint)
+    }
+    c.pairs = next
+    const affected = new Set<Client>([c])
+    for (const id of touched)
+      for (const other of this.pairs.get(id) ?? []) affected.add(other)
+    for (const member of affected) {
+      if (member.socket.readyState !== OPEN) continue
+      const online = [...member.pairs].flatMap((id) =>
+        [...(this.pairs.get(id) ?? [])]
+          .filter((o) => o !== member)
+          .map((o) => ({
+            pairId: id,
+            peerId: o.id,
+            name: o.name,
+            device: o.device,
+          })),
+      )
+      this.send(member.socket, { type: "pairs", online })
     }
   }
 

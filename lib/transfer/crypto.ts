@@ -16,44 +16,19 @@ export async function foldDigests(chunkDigests: Uint8Array[]): Promise<string> {
   return toHex(await sha256(all))
 }
 
-export async function generateKeyPair(): Promise<CryptoKeyPair> {
-  return subtle().generateKey({ name: "ECDH", namedCurve: "P-256" }, false, [
-    "deriveKey",
-  ]) as Promise<CryptoKeyPair>
-}
-
-export async function exportPublicKey(key: CryptoKey): Promise<JsonWebKey> {
-  return subtle().exportKey("jwk", key)
-}
-
-export async function deriveKey(
-  privateKey: CryptoKey,
-  remote: JsonWebKey,
-): Promise<CryptoKey> {
-  const pub = await subtle().importKey(
-    "jwk",
-    remote,
-    { name: "ECDH", namedCurve: "P-256" },
-    false,
-    [],
-  )
-  return subtle().deriveKey(
-    { name: "ECDH", public: pub },
-    privateKey,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"],
-  )
-}
-
 /** AES-GCM with a random 96-bit IV prefixed to the ciphertext. */
 export async function seal(
   key: CryptoKey,
-  plain: ArrayBuffer,
+  plain: BufferSource,
+  aad?: BufferSource,
 ): Promise<ArrayBuffer> {
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
   const cipher = new Uint8Array(
-    await subtle().encrypt({ name: "AES-GCM", iv }, key, plain),
+    await subtle().encrypt(
+      { name: "AES-GCM", iv, ...(aad ? { additionalData: aad } : {}) },
+      key,
+      plain,
+    ),
   )
   const out = new Uint8Array(12 + cipher.byteLength)
   out.set(iv)
@@ -64,10 +39,15 @@ export async function seal(
 export async function open(
   key: CryptoKey,
   sealed: ArrayBuffer,
+  aad?: BufferSource,
 ): Promise<ArrayBuffer> {
   const bytes = new Uint8Array(sealed)
   return subtle().decrypt(
-    { name: "AES-GCM", iv: bytes.subarray(0, 12) },
+    {
+      name: "AES-GCM",
+      iv: bytes.subarray(0, 12),
+      ...(aad ? { additionalData: aad } : {}),
+    },
     key,
     bytes.subarray(12),
   )

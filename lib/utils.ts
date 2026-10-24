@@ -60,9 +60,13 @@ export function formatDuration(seconds: number): string {
   return `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`
 }
 
-/** File names come from the other device: strip path separators, control and reserved characters. */
+/**
+ * File names come from the other device: strip path separators, control and reserved characters,
+ * and bidi overrides (which make "photo\u202Egpj.exe" read as "photoexe.jpg").
+ */
 export function safeFileName(name: string): string {
   const cleaned = name
+    .replace(/[\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]/g, "_")
     .replace(/^\.+/, "")
     .trim()

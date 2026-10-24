@@ -1,3 +1,4 @@
+import { vapidKeys } from "./push.js"
 import { createHmac } from "node:crypto"
 import type { IceServer } from "../lib/protocol.js"
 
@@ -75,6 +76,17 @@ export const config = {
   selfPingUrl: selfPingTarget(),
   // Open-source repo shown in the header/footer with its star count. "" hides it.
   githubRepo: env.GITHUB_REPO ?? "abhie7/signal-share",
+  // Wake-up pushes for paired devices. PUSH_ENABLED=false turns them off.
+  vapid:
+    env.PUSH_ENABLED === "false"
+      ? null
+      : vapidKeys(
+          env,
+          env.VAPID_SUBJECT ||
+            (env.PUBLIC_URL?.startsWith("https://")
+              ? env.PUBLIC_URL
+              : "mailto:push@signalshare.invalid"),
+        ),
 }
 
 export const turnConfigured =

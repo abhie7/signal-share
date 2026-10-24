@@ -19,7 +19,15 @@ import { useConnection, useShare } from "@/lib/store"
 import { safeStorage } from "@/lib/signaling"
 import type { SessionPreview } from "@/lib/protocol"
 import { formatBytes } from "@/lib/utils"
+import { PRECAUTION, riskMessage, riskOf } from "@/lib/risky"
 import { useClientValue } from "@/lib/use-client-value"
+import { isSecret } from "@/lib/transfer/handshake"
+
+/** The share secret from the link's #fragment (never sent to the server), if it survived. */
+const linkSecret = () => {
+  const h = location.hash.slice(1)
+  return isSecret(h) ? h : null
+}
 
 type Load =
   | { state: "loading" }
@@ -76,7 +84,7 @@ export default function ReceivePage() {
   // Coming back after a reload: reclaim our seat automatically.
   useEffect(() => {
     if (resumable && online && idle && load.state === "ready")
-      void join({ sessionId: id })
+      void join({ sessionId: id, secret: linkSecret() })
     // Only on first eligibility.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumable, online, load.state])
@@ -173,19 +181,36 @@ function Preview({
 
         {preview.kind === "files" && (
           <ul className='well mt-5 max-h-60 divide-y divide-border overflow-auto rounded-2xl'>
-            {preview.files.map((f, i) => (
-              <li
-                key={i}
-                className='flex items-center gap-3 px-3 py-2.5 text-sm'
-              >
-                <Icon icon={icon} className='size-4 text-muted-foreground' />
-                <span className='min-w-0 flex-1 truncate'>{f.name}</span>
-                <span className='tabular-nums text-muted-foreground'>
-                  {formatBytes(f.size)}
-                </span>
-              </li>
-            ))}
+            {preview.files.map((f, i) => {
+              const risk = riskOf(f.name)
+              return (
+                <li key={i} className='px-3 py-2.5 text-sm'>
+                  <div className='flex items-center gap-3'>
+                    <Icon
+                      icon={risk ? Alert02Icon : icon}
+                      className={
+                        risk
+                          ? "size-4 text-warning"
+                          : "size-4 text-muted-foreground"
+                      }
+                    />
+                    <span className='min-w-0 flex-1 truncate'>{f.name}</span>
+                    <span className='tabular-nums text-muted-foreground'>
+                      {formatBytes(f.size)}
+                    </span>
+                  </div>
+                  {risk && (
+                    <p className='mt-1.5 pl-7 text-xs text-warning'>
+                      {riskMessage(f.name, risk, preview.senderName)}
+                    </p>
+                  )}
+                </li>
+              )
+            })}
           </ul>
+        )}
+        {preview.kind === "files" && (
+          <p className='mt-3 text-xs text-muted-foreground'>{PRECAUTION}</p>
         )}
         {preview.kind !== "files" && (
           <div className='well mt-5 flex items-center gap-3 rounded-2xl p-4 text-sm'>
@@ -216,7 +241,7 @@ function Preview({
           disabled={!online || busy || claimed}
           onClick={async () => {
             setBusy(true)
-            await join({ sessionId: id })
+            await join({ sessionId: id, secret: linkSecret() })
             setBusy(false)
           }}
         >

@@ -14,6 +14,534 @@ const changelogs: Array<{
   changes: Array<{ type: string; title: string; description: string }>
 }> = [
   {
+    date: "October 24, 2026",
+    version: "2.10.1",
+    summary:
+      "Clearer requests, calmer screens, paired devices by name, a sealed relay, and a round of review fixes.",
+    changes: [
+      {
+        type: "improvement",
+        title: "The Send panel fills its card",
+        description:
+          "The drop zone, the text box and the screen panel now grow to the height of the row, instead of leaving an empty band under the drop zone next to Receive and My devices.",
+      },
+      {
+        type: "improvement",
+        title: "Paired devices go by their name",
+        description:
+          'Paired devices are listed as the other device\'s own name and kind ("Sage Albatross · iPhone") on My devices, the waiting screen, the Accept card and the pairing page, instead of "Your Mac".',
+      },
+      {
+        type: "improvement",
+        title: "Request links are easier to find and understand",
+        description:
+          'Under Receive, "No code to enter?" now leads to a real button, Request files or a screen, with an info tooltip that explains the idea in one go. The form asks "What do you need from them?", the button reads Get link to send them, and the waiting state lists the three steps.',
+      },
+      {
+        type: "improvement",
+        title: "Calmer session screen",
+        description:
+          'How the keys were checked is now a small chip in the footer ("Verified", or the 4-digit security code when there is one to compare) with the explanation in a tooltip, instead of a paragraph in the middle of the card.',
+      },
+      {
+        type: "feature",
+        title: "Info tooltips",
+        description:
+          "A small accessible tooltip component: opens on hover and keyboard focus, on tap for touch screens, and closes with Escape or a tap elsewhere.",
+      },
+      {
+        type: "fix",
+        title: "Hydration error from the command palette",
+        description:
+          "The palette's appearance command rendered a different label on the server and in the browser. It now renders the neutral label until the page has hydrated.",
+      },
+      {
+        type: "fix",
+        title: "Script tag warning from the theme script",
+        description:
+          "The theme script that prevents a flash of the wrong theme now only runs from the server HTML, so React no longer warns about rendering a script on the client.",
+      },
+      {
+        type: "security",
+        title: "Relay control messages are sealed too",
+        description:
+          'Only file data used to be encrypted on the relay; control messages (ready, ack, end, complete, cancel, pause) crossed it as plain JSON, so a modified relay could have faked "Delivered and verified". Every relay frame is now sealed with the share keys, and bound to its direction and position, so frames can\'t be forged, reordered, replayed or bounced back.',
+      },
+      {
+        type: "fix",
+        title: "Reloading the receiver no longer trips the security check",
+        description:
+          'A receiver that reloaded and reclaimed its seat redid the key exchange, but the sender could still use the previous keys for a moment and the share failed with "Security check failed". A new hello now clears the sender\'s old keys.',
+      },
+      {
+        type: "fix",
+        title: "A lost key confirmation no longer stalls the share",
+        description:
+          "If the sender missed the receiver's key confirmation (it was briefly offline), every later attempt timed out and the share ended with a misleading \"couldn't connect\". A timed-out attempt now redoes the key check.",
+      },
+      {
+        type: "fix",
+        title: "No frames lost at the start of a transfer",
+        description:
+          "The first message of a transfer could arrive while the connection was still finishing its security check and be dropped. Messages now wait for the transfer to pick them up.",
+      },
+      {
+        type: "tweak",
+        title: "Pause belongs to whoever paused",
+        description:
+          "Each side now resumes only its own pause (both can be paused at once), and every new connection carries your pause state, so a reloaded device can't leave the transfer stuck paused.",
+      },
+      {
+        type: "fix",
+        title: "Request answers survive a reconnect",
+        description:
+          'Answering a request twice with the same share (a replayed message after a reconnect) is accepted instead of failing with "already answered", and declining can only end the share that actually answered the request.',
+      },
+      {
+        type: "security",
+        title: "Request answers require the link's secret",
+        description:
+          "A device answering a request link now refuses anyone who connects without that link's secret, so the person who asked is the only one who can receive.",
+      },
+      {
+        type: "fix",
+        title: "Two files with the same name kept apart",
+        description:
+          'Saving into a picked folder or private storage gave two loose files with the same name one file, losing the first. Each now gets its own name ("IMG (2).jpg").',
+      },
+      {
+        type: "fix",
+        title: "Previews stay open",
+        description:
+          "An open preview (PDF, video, image) could go blank when anything else on the page updated. It no longer rebuilds.",
+      },
+      {
+        type: "improvement",
+        title: "Fewer resends after a resync",
+        description:
+          "After asking the sender to restart a file, chunks already in flight are dropped quietly instead of each triggering another restart.",
+      },
+      {
+        type: "fix",
+        title: "Smaller fixes",
+        description:
+          'An answer to your request that arrives during another share waits (Accept is disabled until you\'re done) instead of getting lost. The "device came back" retry now really cuts the wait short and stays bounded. Screen-share retries no longer leave old listeners behind.',
+      },
+      {
+        type: "docs",
+        title: "Security claims corrected",
+        description:
+          "How it works, Privacy, the deployment guide and the 2.9.0 notes now say exactly who is protected automatically: whoever opens a link, answers a request or receives on a paired device. Senders are protected automatically only when answering a request; otherwise by comparing the security code, because a modified server could claim a share as a code join before the real recipient.",
+      },
+      {
+        type: "testing",
+        title: "Review fixes covered",
+        description:
+          "New tests: sealed relay frames (tampering, replay and reflection refused), two same-named files, an idempotent request answer and a decline that can't touch other shares, per-side pause, and a receiver that reloads mid-transfer without its leave beacon and still gets every byte.",
+      },
+      {
+        type: "tweak",
+        title: "Small fixes",
+        description:
+          "The code box placeholder no longer uses a character codes never contain, and the devlog's first screenshot loads eagerly (it is the largest image on the changelog).",
+      },
+    ],
+  },
+  {
+    date: "October 24, 2026",
+    version: "2.10.0",
+    summary:
+      "My devices: pair once, send with one tap, wake a closed tab, and see what each device is.",
+    changes: [
+      {
+        type: "feature",
+        title: "My devices",
+        description:
+          'Pair your phone, tablet or laptop once by scanning a QR code (or opening the pairing link). From then on it appears under My devices with its kind ("Your iPhone", "Your Mac") and whether it\'s online, and every waiting share offers "Send to your devices" with one tap, on any network. No account: the pairing secret lives only on the two devices, and the server sees a pair id derived from it.',
+      },
+      {
+        type: "security",
+        title: "Shares between paired devices are verified",
+        description:
+          'A share sent to a paired device is keyed with the pairing\'s secret, so it is verified like a link share ("Keys verified with your device pairing"). Invitations across networks are only allowed between devices that are paired with each other.',
+      },
+      {
+        type: "feature",
+        title: "Unpair from either side",
+        description:
+          "Unpair removes the pairing on this device and, if the other one is online, on that one too. A QR code nobody scanned stops counting after 15 minutes.",
+      },
+      {
+        type: "feature",
+        title: "Wake a paired device",
+        description:
+          'If a paired device\'s tab is closed, Wake sends it a notification ("One of your devices wants to send you something"), as long as that device allowed it once under My devices. Notifications carry no content at all. On iPhone and iPad this needs SignalShare on the Home Screen, which the card explains.',
+      },
+      {
+        type: "feature",
+        title: "Installable app",
+        description:
+          "SignalShare now has a web app manifest, app icons drawn from the rocket logo, and a small service worker used only for wake-up notifications.",
+      },
+      {
+        type: "feature",
+        title: "Device kinds everywhere",
+        description:
+          "Each device reports what it is (Mac, Windows PC, Linux computer, Chromebook, Android device, iPhone or iPad). It shows next to names in the nearby list and on Accept cards, and paired devices are named by it.",
+      },
+      {
+        type: "feature",
+        title: "Recent devices",
+        description:
+          'The History page lists devices you shared with, with their kind, how often you sent and received, and when. It\'s kept only in this browser, can be cleared, and has an off switch ("Stop remembering devices").',
+      },
+      {
+        type: "fix",
+        title: "PDF previews are allowed to load",
+        description:
+          "The content security policy now allows blob: frames, which the in-page PDF preview needs.",
+      },
+      {
+        type: "tweak",
+        title: "No duplicate entries",
+        description:
+          "A paired device on the same network is listed once, under your devices, not again under nearby devices.",
+      },
+      {
+        type: "docs",
+        title: "Push setup documented",
+        description:
+          "The deployment guide covers PUSH_ENABLED, fixed VAPID keys (with a one-line generator) and VAPID_SUBJECT.",
+      },
+      {
+        type: "testing",
+        title: "Pairing and push tested",
+        description:
+          "Server tests cover paired devices finding each other across networks, invitations allowed only with the pairing, wake permissions and unpairing. Unit tests cover device detection, recent devices, the push host allowlist and VAPID signatures. A browser test pairs two devices, sends between them with pairing-verified keys and unpairs; another checks the manifest, icons and service worker.",
+      },
+    ],
+  },
+  {
+    date: "October 24, 2026",
+    version: "2.9.0",
+    summary:
+      "The link is the key: share links are verified end to end, even against a modified server.",
+    changes: [
+      {
+        type: "security",
+        title: "Link shares are verified against the server",
+        description:
+          'Share links now end with a 128-bit secret after the #. Browsers never send that part to a server, and the two devices mix it into a fresh key exchange for every share. The person who opens the link checks the sender\'s keys before anything reaches them, so a server that swapped keys in the middle is caught ("Security check failed"). QR codes carry the secret too. (Corrected in 2.10.1: the sender is only protected automatically when answering a request; otherwise compare the security code.)',
+      },
+      {
+        type: "security",
+        title: "Every route is bound to those keys",
+        description:
+          "The encrypted relay is now sealed with the share keys. Direct and TURN connections (files and screen) only count once each side has signed its view of the connection's DTLS fingerprints, so a relaying man-in-the-middle shows up as a mismatch. A screen share sends no picture until the viewer has passed this check.",
+      },
+      {
+        type: "feature",
+        title: "Security code for codes and nearby invites",
+        description:
+          "Codes are issued by the server, so a code join can't be verified against a malicious server automatically. Instead both screens show the same 4-digit security code to compare, also in the screen viewer's header. Link shares show \"Keys verified with the link's secret\" instead.",
+      },
+      {
+        type: "security",
+        title: "Request links carry the secret too",
+        description:
+          "A request link includes the requester's secret, and the answer is keyed with it, so the asker verifies the person answering in the same way. If an app stripped the # from the link, the share falls back to the security code.",
+      },
+      {
+        type: "improvement",
+        title: "The server receipt mentions key checks",
+        description:
+          '"What the server saw" says when the keys were checked against the link\'s secret, which never reaches the server.',
+      },
+      {
+        type: "infra",
+        title: "Protocol version 3",
+        description:
+          "The handshake is required, so the protocol version is now 3; pages left open from an older version are asked to reload. The per-connection ECDH of the relay was removed: one share-wide exchange now covers every route and every reconnect.",
+      },
+      {
+        type: "docs",
+        title: "Security docs updated",
+        description:
+          "The privacy page, How it works and the deployment guide explain the link secret, the key checks and the security code, replacing the old caveat that a modified server could intercept relay keys.",
+      },
+      {
+        type: "testing",
+        title: "Key checks tested",
+        description:
+          "Unit tests cover key agreement with and without a secret, a man-in-the-middle without the secret, a guessed secret, a different session and fingerprint parsing. Browser tests check that a link share is verified on both sides, that a code join shows the same security code on both screens, and that a tampered link secret stops the share before anything is sent. The real-TURN test passes with the new checks.",
+      },
+    ],
+  },
+  {
+    date: "October 24, 2026",
+    version: "2.8.0",
+    summary: "Request links: ask someone for files or their screen.",
+    changes: [
+      {
+        type: "feature",
+        title: "Ask someone for files or their screen",
+        description:
+          'Under Receive, "Or ask someone to send you something" creates a request link for files or their screen, with an optional note. Send the link (copy, share sheet or QR code) and wait; nothing arrives until you accept.',
+      },
+      {
+        type: "feature",
+        title: "A one-button page for the person you asked",
+        description:
+          'Opening a request link shows who is asking, their note, and one big button: Choose files to send (the photo and file picker on a phone, a drop zone on a computer), or Share my screen ("You choose what to share. You can stop any time."). No codes, no networks, no account.',
+      },
+      {
+        type: "feature",
+        title: "Phones are pointed to a computer for screens",
+        description:
+          'Phones and tablets can\'t share their screen from a browser, so a screen request opened on one says "Open this on your computer" with a QR code and a copy button for the same link.',
+      },
+      {
+        type: "feature",
+        title: "Accept before anything arrives",
+        description:
+          "An answer reaches the asker as an Accept card with the sender's avatar, what they want to send (and how big), and the usual program warnings. Accept starts an ordinary share; Decline tells the other person politely and closes the request.",
+      },
+      {
+        type: "security",
+        title: "Request links work once",
+        description:
+          "A request is used up by its first answer, so a leaked link can't be used to send a stream of offers. Answers must be of the kind that was asked for, only the owner of a share can offer it, the requester's key never leaves their device, and requests expire after 30 minutes. This does properly what V1's \"Request their screen\" tried to do.",
+      },
+      {
+        type: "fix",
+        title: "Accepting from another page opens the share",
+        description:
+          "Accepting a nearby invitation or a request answer while on History or How it works now takes you to the share instead of leaving it running out of sight.",
+      },
+      {
+        type: "testing",
+        title: "Request flows covered end to end",
+        description:
+          "Server tests cover previews without secrets, wrong-kind and stranger answers, single use, declining and accepting. Browser tests cover a files request answered by a first-time visitor and accepted, a screen request viewed and then declined, and the phone fallback with its QR code.",
+      },
+    ],
+  },
+  {
+    date: "October 24, 2026",
+    version: "2.7.0",
+    summary: "Big shares save straight to disk, and folders arrive as folders.",
+    changes: [
+      {
+        type: "feature",
+        title: "Big shares save straight to disk",
+        description:
+          'For shares of 256 MB or more, Chrome and Edge ask where to save as soon as you press Receive, then write each file directly into it. Nothing has to be saved afterwards and memory stays flat. Writes go to a temporary file that is only committed once the file passes its integrity check, and existing files are never overwritten (a second copy is named "report (2).pdf").',
+      },
+      {
+        type: "feature",
+        title: "Large shares stay off memory everywhere else",
+        description:
+          "Other browsers write big shares into the browser's private disk storage and download from there at the end. If that storage runs out (private windows cap it at about 128 MB per file), the transfer switches to memory and receives that file again, without losing anything. Storage is cleared when you press Done, and anything left by a closed tab is removed after 12 hours.",
+      },
+      {
+        type: "feature",
+        title: "Folders arrive as folders",
+        description:
+          'A folder you pick or drop is sent as its files with their paths, instead of being zipped first. On Chrome and Edge the receiver picks a location and gets the same folder structure. Elsewhere, "Save as zip" downloads the folder in one go; the zip is assembled from the received files without copying or recompressing them. Very large folders (over 500 files) are still zipped before sending.',
+      },
+      {
+        type: "security",
+        title: "Received paths can't escape the folder",
+        description:
+          'Folder paths from the other device are checked segment by segment. Anything that tries to climb out of the chosen folder ("..", absolute or empty segments) is flattened into a single safe file name.',
+      },
+      {
+        type: "improvement",
+        title: "Folder files show where they live",
+        description:
+          "Files picked from a folder show their folder path under the name, on both the sending list and the received list.",
+      },
+      {
+        type: "testing",
+        title: "Tests for disk saving and folders",
+        description:
+          "Unit tests cover path safety, the disk writer (folders recreated, no overwrites, discarded half-written files), a transfer written through it, the fallback when storage runs out, and the zip writer (checked with Python's zipfile). Browser tests cover a folder arriving in a picked location, a folder saved as one zip, and a 270 MB share through private storage and its fallback.",
+      },
+    ],
+  },
+  {
+    date: "October 24, 2026",
+    version: "2.6.0",
+    summary:
+      "Share anything faster and more safely: paste anywhere, smart text, previews, pause, warnings, shortcuts.",
+    changes: [
+      {
+        type: "feature",
+        title: "Paste anywhere to share",
+        description:
+          "Press ⌘V (Ctrl+V) anywhere on the Share page. Files go to Files, a SignalShare code or link goes straight to Receive, and anything else becomes text to send. Inside a text field, paste works as usual.",
+      },
+      {
+        type: "feature",
+        title: "Text knows what it is",
+        description:
+          'The Text box recognises links and code as you type and shows a "Send as" choice (Text, Code or Link) that you can correct. Code switches the box to a monospace font and shows the detected language.',
+      },
+      {
+        type: "feature",
+        title: "Links arrive as links",
+        description:
+          "A received link shows its full domain first (in punycode, so look-alike domains show their real name), the whole address underneath, and Open and Copy buttons. Nothing opens by itself, plain http links get a warning, and only http(s) links are ever clickable.",
+      },
+      {
+        type: "feature",
+        title: "Code snippets with highlighting",
+        description:
+          "Received code is coloured in the brand palette with line numbers, a Wrap toggle and Copy. The language is detected automatically (or taken from the sender's hint). JSON is pretty-printed. The highlighter (highlight.js, about 40 KB) only loads when something looks like code.",
+      },
+      {
+        type: "security",
+        title: "Secret check before sending text",
+        description:
+          'Before text leaves your device, it is checked in the browser for AWS keys, GitHub, Slack and Stripe tokens, Google and AI API keys, private keys, JWTs and .env-style secrets. You see "2 possible secrets" with a Redact button (which replaces only the secret values) or send anyway. It warns, never blocks.',
+      },
+      {
+        type: "feature",
+        title: "Previews before saving",
+        description:
+          "Received images and videos show thumbnails. Images, video, audio, PDFs and text files open in an in-page preview. With several files you can pick which ones to save. Previews take their type from the file extension, never the sender's claim, and HTML, SVG and XML are only ever shown as source text.",
+      },
+      {
+        type: "security",
+        title: "Warnings for programs and scripts",
+        description:
+          "Programs and installers (.exe, .dmg, .pkg, .apk and more), scripts (.sh, .bat, .ps1, .command and more), macro-enabled Office files and disguised names (invoice.pdf.exe, right-to-left tricks) are flagged on the receive page, in nearby invitations and next to the received file, in plain words. A single program is never saved automatically. Every receive also says: only accept files you expect; SignalShare can't scan files because they're end-to-end encrypted.",
+      },
+      {
+        type: "security",
+        title: "Bidi characters stripped from file names",
+        description:
+          'Right-to-left override characters, which make "photo‮gpj.exe" read as "photoexe.jpg", are removed from received file names.',
+      },
+      {
+        type: "feature",
+        title: "Pause and resume",
+        description:
+          'Either side can pause a file transfer. Both see who paused it ("Paused by Clever Lynx"), and either can resume. Pausing while the connection is down still reaches the other device when it comes back.',
+      },
+      {
+        type: "feature",
+        title: "Progress in the tab and a done notification",
+        description:
+          'The tab title shows "42% · SignalShare" while a transfer runs, then Done or Stopped. After 10 seconds a "Notify me when done" button appears; the notification only fires if the tab is in the background and never contains file names.',
+      },
+      {
+        type: "improvement",
+        title: "Visible recovery",
+        description:
+          'A dropped connection now says where it stopped ("Connection dropped at 64%, reconnecting… Nothing received so far is lost.") and, once back, "Resumed at 64%, nothing lost", including a plain note when the route changed (for example to the encrypted relay).',
+      },
+      {
+        type: "feature",
+        title: "Connection quality for screen sharing",
+        description:
+          "The stream badge now has signal bars (good, fair, poor) from the live round-trip time and packet loss, with the exact numbers on hover. File transfers keep showing their route and measured speed.",
+      },
+      {
+        type: "feature",
+        title: "Revoke and choose an expiry",
+        description:
+          "While waiting, the button reads Revoke link, and you can choose how long an unused share stays open: 10 minutes, 30 minutes (default), 1 hour or 24 hours. The server enforces it.",
+      },
+      {
+        type: "fix",
+        title: "Late claims no longer expire at once",
+        description:
+          "A claimed share's 12-hour lifetime now counts from the moment it was claimed, not from when it was created, so a share claimed late in a long expiry keeps working.",
+      },
+      {
+        type: "feature",
+        title: "What the server saw",
+        description:
+          "After every share, a receipt lists what the server saw (names and sizes, device names, the code, IP addresses used to connect), what it never saw (contents), which route the data took, and when the share left server memory.",
+      },
+      {
+        type: "feature",
+        title: "Keyboard shortcuts and a command palette",
+        description:
+          "⌘K (Ctrl+K) opens a command palette. R focuses the code box, S starts screen sharing, Esc cancels a share that hasn't started yet (never a running transfer), and ? lists every shortcut. Single keys never fire while you type, and no browser shortcut is overridden except ⌘K.",
+      },
+      {
+        type: "tweak",
+        title: "Text receipts read correctly",
+        description:
+          'A received text says "Verified intact" instead of talking about files.',
+      },
+      {
+        type: "testing",
+        title: "Browser tests for every new feature",
+        description:
+          "Nine new Playwright tests cover code detection and highlighting, link cards, secret redaction, paste routing, pause and resume, program warnings, previews and the server receipt, expiry changes, and the command palette. New unit tests cover link, code and receive-target detection, secret patterns and redaction, risky names, preview types, expiry rules and the pause frames. Shared browser test helpers moved to e2e/helpers.ts.",
+      },
+    ],
+  },
+  {
+    date: "October 24, 2026",
+    version: "2.5.2",
+    summary: "The landing headline fits every screen.",
+    changes: [
+      {
+        type: "fix",
+        title: "Long hero phrases ran off small screens",
+        description:
+          'The rotating phrase is a single line of physics-driven letters, so the longer phrases spilled past the edge on phones. It now wraps at full heading size, the same size as "Send anything to", and each wrapped line morphs on its own. The heading always reserves room for the longest phrase at the current width, so nothing below it moves when the words change.',
+      },
+      {
+        type: "improvement",
+        title: "Hero phrases never repeat within a round",
+        description:
+          'Phrases are drawn from a shuffle bag: every phrase shows once, in random order, before any repeats, and a new round never starts with the phrase that just ended the last one. "any device." still opens the page.',
+      },
+    ],
+  },
+  {
+    date: "October 24, 2026",
+    version: "2.5.1",
+    summary: "Screen sharing is smoother and sharp from the first second.",
+    changes: [
+      {
+        type: "fix",
+        title: "Janky screen sharing",
+        description:
+          "Capture asked for 30 fps at full native resolution (up to 5K on a Retina Mac), the encoder was told to protect sharpness by dropping frames, and no bitrate ceiling was set. Screen sharing now captures at 1080p and 60 fps, defaults to a Smooth profile that keeps 60 fps and lowers resolution first under pressure, allows up to 12 Mbps, and prefers H.264, which most Macs and PCs encode in hardware.",
+      },
+      {
+        type: "fix",
+        title: "Soft, blurry first seconds",
+        description:
+          "WebRTC starts its bandwidth estimate near 0.3 Mbps, so a new share began at 640×360 and took a while to sharpen. The screen-share connection now starts around 4 Mbps; in testing the viewer received full 1920×1080 within two seconds instead of 360p after six.",
+      },
+      {
+        type: "new",
+        title: "Smooth or sharp, while live",
+        description:
+          "The sharer can switch between “Smooth · 60 fps” and “Sharp text” (30 fps, keeps every pixel of small text) without reconnecting.",
+      },
+      {
+        type: "new",
+        title: "Live stream stats",
+        description:
+          "Viewers see the resolution and frame rate actually arriving (for example “1080p · 60 fps”) next to the title; sharers see what they are sending.",
+      },
+      {
+        type: "testing",
+        title: "Quality checks",
+        description:
+          "A unit test for the start-bitrate SDP rewrite, and a measured run confirming 1080p capture, the encoder limits for both profiles and full resolution reaching the viewer within two seconds. 60 fps could not be confirmed in headless testing: its fake screen source produces about 20 frames a second.",
+      },
+    ],
+  },
+  {
     date: "October 23, 2026",
     version: "2.5.0",
     summary:

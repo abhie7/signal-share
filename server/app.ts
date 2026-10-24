@@ -133,6 +133,25 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     },
   )
 
+  fastify.get<{ Params: { id: string } }>(
+    "/api/requests/:id",
+    async (req, reply) => {
+      if (!previewLimiter.take(req.ip))
+        return reply
+          .code(429)
+          .send({ error: { code: "RATE_LIMITED", message: "Slow down" } })
+      const request = hub.requests.get(req.params.id)
+      if (!request)
+        return reply.code(404).send({
+          error: {
+            code: "SESSION_NOT_FOUND",
+            message: "This request has expired or was cancelled.",
+          },
+        })
+      return hub.requests.preview(request)
+    },
+  )
+
   // navigator.sendBeacon target so a closing tab ends its share immediately.
   fastify.addContentTypeParser(
     "text/plain",

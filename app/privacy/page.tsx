@@ -38,6 +38,16 @@ export default function PrivacyPage() {
             devices agree on (ECDH + AES-GCM), so the relay only forwards
             ciphertext. It is never written to disk.
           </li>
+          <li>
+            Share links end with a secret after the <code>#</code>. Browsers
+            never send that part to a server. Whoever opens the link uses it to
+            check the sender’s keys on every route, so a modified SignalShare
+            server can’t read or swap what reaches them. When you join with a
+            code or a nearby invitation instead, both screens show a 4-digit
+            security code you can compare. Compare it as the sender too: a
+            modified server could otherwise claim a share before the real
+            recipient does.
+          </li>
         </ul>
       </section>
       <section>
